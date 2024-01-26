@@ -22,6 +22,7 @@ def main(silent, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lco, 
     and finds sequences of exposures that form individual visits.
     """    
     
+    
     from itertools import product
     from astropy.table import Table
 
@@ -46,28 +47,35 @@ def main(silent, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lco, 
     
     if processes is not None:
         # Parallel
+        import os
+        import signal
         import concurrent.futures
-        pool = concurrent.futures.ProcessPoolExecutor(max_workers=processes)
-        
-        futures = []
-        for observatory, mjd in iterable:
-            futures.append(pool.submit(get_exposure_metadata_as_list, observatory, mjd))
+        with concurrent.futures.ProcessPoolExecutor(max_workers=processes) as pool:
+            futures = []
+            for observatory, mjd in iterable:
+                futures.append(pool.submit(get_exposure_metadata_as_list, observatory, mjd))
 
-        for future in concurrent.futures.as_completed(futures):
-            rows = future.result()
-            if len(rows) == 0: 
-                continue
-            
-            exposures = Table(rows=rows)
-            exposures.sort(("exposure", ))
-            
-            sequence_indices = get_sequence_indices(exposures)
-            exposures_and_sequence_indices.append((exposures, sequence_indices))
-            if not silent:
-                utils.pretty_print_table(
-                    exposures[print_columns],
-                    sequence_indices
-                )    
+            try:                
+                for future in concurrent.futures.as_completed(futures):
+                    rows = future.result()
+                    if len(rows) == 0: 
+                        continue
+                    
+                    exposures = Table(rows=rows)
+                    exposures.sort(("exposure", ))
+                    
+                    sequence_indices = get_sequence_indices(exposures)
+                    exposures_and_sequence_indices.append((exposures, sequence_indices))
+                    if not silent:
+                        utils.pretty_print_table(
+                            exposures[print_columns],
+                            sequence_indices
+                        )    
+            except KeyboardInterrupt:
+                for pid in pool._processes:
+                    os.kill(pid, signal.SIGKILL)
+                pool.shutdown(wait=False, cancel_futures=True)                
+                raise KeyboardInterrupt
     else:
         # Serial    
         for observatory, mjd in product(observatories, mjds):
