@@ -155,7 +155,7 @@ def get_sequence_indices(exposures, keys=("fieldid", "plateid", "configid")):
     sequence_indices = np.searchsorted(exposures["exposure"], sequence_exposure_numbers)
     if sequence_indices.size > 0:
         sequence_indices += [0, 1] # to offset the end index
-    return sequence_indices
+    return np.sort(sequence_indices, axis=0)
     
     
 def get_unique_exposure_paths(paths):
