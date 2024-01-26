@@ -34,46 +34,44 @@ almanac --mjd 59300
 almanac --date 2021-01-01
 ```
 
+You can use negative MJD values to indicate days relative to today:
+
+```bash
+almanac --mjd -1 # Yesterday
+almanac --mjd -7 # Last week
+```
+
 You can also specify a range of days:
 
 ```bash
-almanac --mjd 59300 59310 # Give me these 10 days
-almanac --date 2021-01-01 2021-01-31 # Give me all of January 2021
+almanac --mjd-start 59300 --mjd-end 59310 # Give me these 10 days
+almanac --date-start 2021-01-01 --date-end 2021-01-31 # Give me all of January 2021
 ```
 
 ## Fiber mappings
 
-You can also use `almanac` to see the fiber mappings for a given plate (SDSS-IV) or FPS pointing (SDSS-V) by specifing the ``--fibres`` flag. This will give you the mapping of fibers to targets, and the target properties. 
+You can also use `almanac` to see the fiber mappings for a given plate (SDSS-IV) or FPS pointing (SDSS-V) by specifing the ``--fibers`` (or `--fibres``) flag. This will give you the mapping of fibers to targets, and the target properties. 
 
 ```bash
 almanac --mjd 60000 --fibres
 ```
 
-The SDSS identifiers (`sdss_id`) are not included in the fibre mapping tables by default. When you use the ``--fibres`` flag this will automatically include a cross-match to the database to assign SDSS identifiers to every target. You can disable this option with ``--no-x-match``. The ``--no-x-match`` flag is ignored if ``--fibres`` is not used.
+The fiber mapping tables are cross-matched to the SDSS database to include the SDSS identifiers for each target. If you don't want to do this cross-match, you can use the ``--no-x-match`` flag. The ``--no-x-match`` flag is ignored if ``--fibers`` is not used.
 
-## Exposure sequences
-
-You can also use `almanac` to group exposures of the same pointing that were taken in sequence. This is useful for checking which exposures should be associated to describe a single visit. Use the ``--sequences`` flag to add sequences for the given data.
-
-```bash
-almanac --apo --sequences
-```
 
 ## Output behaviour
 
-By default the output will appear in a pretty way in the terminal. Instead you can specify an output path with the ``--output`` (or ``-O``) flag. If the output path already exists, the default behaviour is to append unique entries. You can overwrite the file with the ``--overwrite`` flag.
+By default the output will appear in a pretty way in the terminal. You can silence this with the ``--silence`` flag. You can also write the outputs to a structured HDF5 file by specifying an output path with the ``--output`` (or ``-O``) flag. If the output path already exists, the default behaviour is to overwrite existing entries. 
 
 ```bash
 almanac --output /path/to/file.h5 # Append today's data to existing file
-almanac --output /path/to/file.h5 --overwrite # Overwrite today's data to existing file
 ```
 
-## Keeping a local record up to date
+An example structure of the HDF5 file is below:
 
-If you are wanting to keep a local record up to date, including all fibre mappings and exposure sequences, then the daily command you are looking for is probably:
-
-```bash
-almanac --fibres --sequences --output /path/to/file.h5
 ```
-
-This will append today's data to the output path, and will include the fibre mappings and exposure sequences. If you want to overwrite the file with just data taken from today, add the ``--overwrite`` flag.
+    apo/59300/exposures         # a data table of exposures
+    apo/59300/sequences         # a Nx2 array of exposure numbers (inclusive) that form a sequence
+    apo/59300/fibers/fps/1      # a data table of fiber mappings for FPS configuration id 1
+    apo/59300/fibers/plates/2   # a data table of fiber mappings for plate id 2
+```
