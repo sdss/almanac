@@ -112,9 +112,12 @@ def main(silent, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lco, 
             except ImportError:
                 click.echo("Could not import `sdssdb`: have you run `module load sdssdb`?", err=True)                
             else:            
-                catalogdb.database.set_profile(profile)        
-                fps_fiber_maps.update(get_fps_fiber_maps(configids, no_x_match=no_x_match, tqdm_kwds=tqdm_kwds))
-                plate_fiber_maps.update(get_plate_fiber_maps(plateids, no_x_match=no_x_match, tqdm_kwds=tqdm_kwds))
+                catalogdb.database.set_profile(profile) 
+                if not catalogdb.database.connected:
+                    click.echo(f"Could not connect to SDSS database (profile={profile}). Do you have the necessary entries in your `~/.pgpass` file?", err=True)
+                else:
+                    fps_fiber_maps.update(get_fps_fiber_maps(configids, no_x_match=no_x_match, tqdm_kwds=tqdm_kwds))
+                    plate_fiber_maps.update(get_plate_fiber_maps(plateids, no_x_match=no_x_match, tqdm_kwds=tqdm_kwds))
         
     # Write the output to disk
     if output:
