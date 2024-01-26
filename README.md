@@ -1,8 +1,6 @@
 # almanac
 
 ![Versions](https://img.shields.io/badge/python->3.7-blue)
-[![Documentation Status](https://readthedocs.org/projects/almanac/badge/?version=latest)](https://almanac.readthedocs.io/en/latest/?badge=latest)
-[![codecov](https://codecov.io/gh/sdss/almanac/branch/main/graph/badge.svg)](https://codecov.io/gh/sdss/almanac)
 
 Everything we've got.
 
@@ -14,6 +12,9 @@ Everything we've got.
 ```bash
 module load almanac
 ```
+
+> [!TIP]
+> If you don't have an up-to-date Python environment at Utah, then you may want to run `module load miniconda` as well so that you have all the dependencies that `almanac` needs.
 
 # Usage
 
