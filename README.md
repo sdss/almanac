@@ -7,18 +7,20 @@ Everything we've got.
 
 # Installation
 
-`almanac` needs local disk access to the raw SDSS data frames. If you want to use this at Utah, you can install it with:
+`almanac` needs local disk access to the raw SDSS data frames. 
+
+If you want to use this at Utah, you can install it with:
 
 ```bash
 module load almanac
 ```
 
 > [!TIP]
-> If you don't have an up-to-date Python environment at Utah, then you may want to run `module load miniconda` as well so that you have all the dependencies that `almanac` needs.
+> If you don't already have a Python environment set up at Utah that uses `sdssdb`, then you may want to run `module load miniconda` as well so that you have all the requisite dependencies.
 
 # Usage
 
-Use `almanac` to see details on data taken from both observatories in the last 24 hours, or specify the observatory:
+Use `almanac` to see details on data taken today from both observatories, or specify the observatory:
 
 ```bash
 almanac
