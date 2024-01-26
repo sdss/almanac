@@ -25,26 +25,29 @@ def parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end, earliest_mjd
     has_mjd_range = (mjd_start is not None or mjd_end is not None)
     has_date_range = (date_start is not None or date_end is not None)
     
+    current_mjd = get_current_mjd()
     n_given = sum([has_mjd_range, has_date_range, mjd is not None, date is not None])
     if n_given > 1:
         raise ValueError("Cannot specify more than one of --mjd, --mjd-start/--mjd-end, --date, --date-start/--date-end")
-    
     if n_given == 0:
-        return (get_current_mjd(), )
-
+        return (current_mjd, )
     if mjd is not None:
         if mjd < 0:
-            mjd += get_current_mjd()
+            mjd += current_mjd
         return (mjd, )
     if has_mjd_range:
         mjd_start = mjd_start or earliest_mjd
-        mjd_end = mjd_end or get_current_mjd()
+        if mjd_start < 0:
+            mjd_start += current_mjd
+        mjd_end = mjd_end or current_mjd
+        if mjd_end < 0:
+            mjd_end += current_mjd            
         return range(mjd_start, 1 + mjd_end)
     if date is not None:        
         return (datetime_to_mjd(date), )
     if has_date_range:
         mjd_start = earliest_mjd if date_start is None else datetime_to_mjd(date_start)
-        mjd_end = get_current_mjd() if date_end is None else datetime_to_mjd(date_end)
+        mjd_end = current_mjd if date_end is None else datetime_to_mjd(date_end)
         return range(mjd_start, 1 + mjd_end)
     
     raise RuntimeError("Should not be able to get here")
