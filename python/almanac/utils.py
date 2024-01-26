@@ -52,8 +52,25 @@ def parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end, earliest_mjd
     
     raise RuntimeError("Should not be able to get here")
 
+def pretty_print_targets(targets, fiber_type, refid, header_color="lightcyan", indent="\t"):
+    lines, outs = targets.formatter._pformat_table(
+        targets, -1, max_width=None, show_name=True, show_unit=None, show_dtype=False, align=None
+    )
+    n_header = outs["n_header"]          
+    color_print(f"{fiber_type.upper()} {refid} ({len(targets)} targets):", header_color)
+    color_print(f"{indent}{lines[1]}", header_color)
+    
+    for i, line in enumerate(lines, start=-n_header):
+        if i < 0:
+            color_print(f"{indent}{line}", header_color)
+        else:
+            print(f"{indent}{line}")
+    
+    color_print(f"{indent}{lines[1]}", header_color)    
+    print("\n")    
 
-def pretty_print_table(table, sequence_indices=None, header_color="lightcyan", sequence_colors=("lightgreen", "yellow")):
+
+def pretty_print_exposures(table, sequence_indices=None, header_color="lightcyan", sequence_colors=("lightgreen", "yellow")):
     
     observatory, mjd = table["observatory"][0], table["mjd"][0]
     color_print(f"{len(table)} exposures from {observatory.upper()} on MJD {mjd}:", header_color)

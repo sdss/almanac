@@ -13,7 +13,7 @@ PLATELIST_DIR = os.environ.get("PLATELIST_DIR", "/uufs/chpc.utah.edu/common/home
 SDSSCORE_DIR = os.environ.get("SDSSCORE_DIR", "/uufs/chpc.utah.edu/common/home/sdss50/software/git/sdss/sdsscore/main/")
 
 YANNY_TARGET_MATCH = re.compile(
-    'STRUCT1 APOGEE_?\w* (?P<target_type>\w+) (?P<source_type>[\w-]+) (?P<target_ra>[\-\+\.\w\d+]+) (?P<target_dec>[\-\+\.\w\d+]+) \d+ \d+ \d+ (?P<fibre_id>\d+) .+ (?P<target_id>"?[\w\d\s\-\+]{1,29}"?) [\d ]?(?P<xfocal>[\-\+\.\w\d+]+) (?P<yfocal>[\-\+\.\w\d+]+)$'
+    'STRUCT1 APOGEE_?\w* (?P<target_type>\w+) (?P<source_type>[\w-]+) (?P<target_ra>[\-\+\.\w\d+]+) (?P<target_dec>[\-\+\.\w\d+]+) \d+ \d+ \d+ (?P<fiber_id>\d+) .+ (?P<target_id>"?[\w\d\s\-\+]{1,29}"?) [\d ]?(?P<xfocal>[\-\+\.\w\d+]+) (?P<yfocal>[\-\+\.\w\d+]+)$'
 )
 
 RAW_HEADER_KEYS = (
@@ -176,6 +176,9 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, prof
         fiber_maps["fps"].update(get_fps_fiber_maps(observatory, configids, **kwargs))
         fiber_maps["plates"].update(get_plate_fiber_maps(plateids, **kwargs))
     
+    for fiber_type, mappings in fiber_maps.items():
+        for refid, targets in mappings.items():
+            fiber_maps[fiber_type][refid] = Table(rows=targets)
     return (exposures, sequence_indices, fiber_maps)
 
 
@@ -262,11 +265,14 @@ def get_fps_fiber_maps(observatory, config_ids, xmatch=True):
             )
             sdss_id_lookup = {}
             for sdss_id, catalogid in q:
-                sdss_id_lookup[catalogid] = sdss_id
+                sdss_id_lookup[str(catalogid)] = sdss_id
             
             for target in targets:
                 target["sdss_id"] = sdss_id_lookup.get(target["catalogid"], -1)
-                    
+        else:
+            for target in targets:
+                target["sdss_id"] = -1
+                          
         fps_fiber_maps[config_id] = targets
     return fps_fiber_maps
 
@@ -305,10 +311,12 @@ def get_plate_fiber_maps(plate_ids, xmatch=True):
             sdss_id_lookup = {}
             for sdss_id, designation in q:
                 sdss_id_lookup[designation] = sdss_id
-            
+                        
             for target in targets:                    
                 target["sdss_id"] = sdss_id_lookup.get(target_id_to_designation(target["target_id"]), -1)
-                                
+        else:
+            for target in targets:
+                target["sdss_id"] = -1                
         plate_fiber_maps[plate_id] = targets
     
     return plate_fiber_maps

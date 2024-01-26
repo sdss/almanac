@@ -1,89 +1,60 @@
 
 import h5py as h5
 import numpy as np
-from astropy.table import Table
+from tqdm import tqdm
 from astropy.io.misc.hdf5 import write_table_hdf5
 
-def write_almanac(output_path, exposures_and_sequence_indices, fps_fiber_maps=None, plate_fiber_maps=None, compression=True, mode="a", verbose=False):
+def get_or_create_group(fp, group_name):
+    try:
+        group = fp[group_name]
+    except KeyError:
+        group = fp.create_group(group_name)
+    finally:
+        return group
     
-    
-    """
-    Structure:
-    
-    {observatory}/{mjd}/exposures
-    {observatory}/{mjd}/sequences -> (start, end) of exposure numbers (inclusive)
-    {observatory}/{mjd}/fibers/fps/{config_id}
-    {observatory}/{mjd}/fibers/plates/{plateid}
-    """
-    
-    _print = print if verbose else lambda *args, **kwargs: None
+def delete_hdf5_entry(fp, group_name):
+    try:
+        del fp[group_name]
+    except KeyError:
+        pass
 
-    fps_fiber_maps = fps_fiber_maps or {}
-    plate_fiber_maps = plate_fiber_maps or {}
+def _update_almanac(fp, exposures, sequence_indices, fiber_maps, compression=True, verbose=False):
+
+    _print = print if verbose else lambda *args, **kwargs: None
+    observatory, mjd = (exposures["observatory"][0], exposures["mjd"][0])
+    group = get_or_create_group(fp, f"{observatory}/{mjd}")
     
-    any_fiber_maps = (len(fps_fiber_maps) > 0) or (len(plate_fiber_maps) > 0)
-        
-    with h5.File(output_path, mode) as fp:
-        
-        _print(f"Writing to output file {output_path}:")
-        for exposures, sequence_indices in exposures_and_sequence_indices:
-            
-            observatory, mjd = (exposures["observatory"][0], exposures["mjd"][0])
-            group_name = f"{observatory}/{mjd}"
-            group = fp[group_name] if group_name in fp else fp.create_group(group_name)
-            
-            _print(f"\t{group_name}")
-                
-            if "exposures" in group:
-                del group["exposures"]
-            write_table_hdf5(exposures, group, "exposures", compression=compression)
-            _print(f"\t{group_name}/exposures")
+    delete_hdf5_entry(group, "exposures")
+    write_table_hdf5(exposures, group, "exposures", compression=compression)
     
-            if len(sequence_indices) > 0:
-                if "sequences" in group:
-                    del group["sequences"]
-                group.create_dataset(
-                    "sequences",
-                    data=np.array(exposures["exposure"][sequence_indices - [0, 1]])
-                )
-                _print(f"\t{group_name}/sequences")
-            
-            if any_fiber_maps:
-                # for this mjd
-                gnf = "fibers"
-                fibers_group = group[gnf] if gnf in group else group.create_group(gnf)
-                _print(f"\t{group_name}/{gnf}")
-                
-                configids = set(exposures["configid"]).difference({""})
-                plateids = set(exposures["plateid"]).difference({""})
-                
-                if configids:
-                    gn = "fps"
-                    fps_group = fibers_group[gn] if gn in fibers_group else fibers_group.create_group(gn)
-                    _print(f"\t{group_name}/{gnf}/{gn}")
-                    
-                    for config_id in map(str, sorted(tuple(map(int, configids)))):
-                        if config_id in fps_group:
-                            del fps_group[config_id]
-                        write_table_hdf5(
-                            Table(rows=fps_fiber_maps[config_id]),
-                            fps_group,
-                            config_id,
-                            compression=compression,
-                        )
-                        _print(f"\t{group_name}/{gnf}/fps/{config_id}")
-                
-                if plateids:
-                    gn = "plates"
-                    plates_group = fibers_group[gn] if gn in fibers_group else fibers_group.create_group(gn)                    
-                    _print(f"\t{group_name}/{gnf}/{gn}")                    
-                    for plateid in map(str, sorted(tuple(map(int, plateids)))):
-                        if plateid in plates_group:
-                            del plates_group[plateid]
-                        write_table_hdf5(
-                            Table(rows=plate_fiber_maps[plateid]),
-                            plates_group,
-                            plateid,
-                            compression=compression,
-                        )
-                        _print(f"\t{group_name}/{gnf}/{gn}/{plateid}")
+    _print(f"\t{observatory}")
+    _print(f"\t{observatory}/{mjd}")
+    _print(f"\t{observatory}/{mjd}/exposures")
+    
+    if len(sequence_indices) > 0:
+        delete_hdf5_entry(group, "sequences")
+        group.create_dataset(
+            "sequences",
+            data=np.array(exposures["exposure"][sequence_indices - [0, 1]])
+        )
+        _print(f"\t{observatory}/{mjd}/sequences")
+
+    for fiber_type, mapping in fiber_maps.items():
+        for refid, targets in mapping.items():                
+            g = get_or_create_group(group, f"fibers/{fiber_type}")
+            delete_hdf5_entry(group, f"fibers/{fiber_type}/{refid}")
+            write_table_hdf5(
+                targets,
+                g,
+                refid,
+                compression=compression,
+            )             
+                            
+            _print(f"\t{observatory}/{mjd}/fibers/{fiber_type}/{refid}")
+        
+
+def write_almanac(output, results, **kwargs):
+    
+    with h5.File(output, "a") as fp:
+        for args in tqdm(results, desc=f"Updating {output}"):
+            _update_almanac(fp, *args, **kwargs)
