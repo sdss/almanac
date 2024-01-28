@@ -15,7 +15,10 @@ import click
 @click.option('--no-x-match', is_flag=True, help="Do not cross-match targets with SDSS-V database")
 @click.option('--output', '-O', default=None, type=str, help="Output file")
 @click.option('--processes', '-p', default=None, type=int, help="Number of processes to use")
-def main(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lco, fibers, no_x_match, output, processes):
+@click.option('--exposure-columns', default="observatory,mjd,exposure,lampqrtz,lampthar,lampune,fieldid,plateid,cartid,configid,imagetyp", help="Comma-separated list of exposure columns to show", show_default=True)
+@click.option('--fps-columns', default="sdss_id,catalogid,program,category,firstcarton,ra,dec,fiberId", help="Comma-separated list of fiber positioner columns to show", show_default=True)
+@click.option('--plate-columns', default="sdss_id,target_id,target_ra,target_dec,target_type,source_type,fiber_id", help="Comma-separated list of plate columns to show", show_default=True)
+def main(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lco, fibers, no_x_match, output, processes, exposure_columns, fps_columns, plate_columns):
     """
     The almanac extracts metadata from raw APOGEE exposures (including fiber mappings)
     and finds sequences of exposures that form individual visits.
@@ -32,9 +35,9 @@ def main(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lc
 
     tqdm_kwds = dict(disable=(verbosity < 1))
 
-    show_exposure_columns = ["observatory", "mjd", "exposure", "chip", "fieldid", "plateid", "cartid", "configid", "imagetyp"]
-    show_fps_columns = ["sdss_id", "catalogid", "program", "category", "firstcarton", "ra", "dec", "fiberId"]
-    show_plate_columns = ["sdss_id", "target_id", "target_ra", "target_dec", "target_type", "source_type", "fiber_id"]
+    show_exposure_columns = exposure_columns.split(",")
+    show_fps_columns = fps_columns.split(",")
+    show_plate_columns = plate_columns.split(",")
     
     def pretty_print_progress(exposures, sequence_indices, fiber_maps):
         if verbosity >= 2:
