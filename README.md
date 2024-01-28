@@ -53,7 +53,7 @@ almanac --date-start 2021-01-01 --date-end 2021-01-31 # Give me all of January 2
 
 ## Fiber mappings
 
-You can also use `almanac` to see the fiber mappings for a given plate (SDSS-IV) or FPS pointing (SDSS-V) by specifing the ``--fibers`` (or `--fibres``) flag. This will give you the mapping of fibers to targets, and the target properties. 
+You can also use `almanac` to see the fiber mappings for a given plate (SDSS-IV) or FPS pointing (SDSS-V) by specifing the ``--fibers`` (or ``--fibres``) flag. This will give you the mapping of fibers to targets, and the target properties. 
 
 ```bash
 almanac --mjd 60000 --fibres
