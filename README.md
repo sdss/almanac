@@ -64,7 +64,12 @@ The fiber mapping tables are cross-matched to the SDSS database to include the S
 
 ## Output behaviour
 
-By default the output will appear in a pretty way in the terminal. You can silence this with the ``--silence`` flag. You can also write the outputs to a structured HDF5 file by specifying an output path with the ``--output`` (or ``-O``) flag. If the output path already exists, the default behaviour is to overwrite existing entries. 
+By default there is minimal output to the terminal. You can adjust the verbosity level using `-v`:
+- `-v`: show progress bar only
+- `-vv`: show progress bar and exposure metadata
+- `-vvv`: show progress bar, exposure metadata, and fiber mapping metadata
+
+You can also write the outputs to a structured HDF5 file by specifying an output path with the ``--output`` (or ``-O``) flag. If the output path already exists, the default behaviour is to overwrite existing entries *only*. So if you run `almanac` once for MJD 60000 and output to a file, and then run it again for MJD 60001 and output to the same file, your file will have data for both MJDs. 
 
 ```bash
 almanac --output /path/to/file.h5 # Append today's data to existing file
