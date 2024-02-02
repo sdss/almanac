@@ -154,8 +154,11 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, prof
         return None
     exposures.sort(("exposure", ))
     
-    sequence_indices = get_sequence_indices(exposures)
-    
+    sequence_indices = {
+        "objects": get_object_sequence_indices(exposures),
+        "arclamps": get_arclamp_sequence_indices(exposures)
+    }
+        
     fiber_maps = dict(fps={}, plates={})
     if fibers:
         configids = set(exposures["configid"]).difference({"", "-1", "-999"})
@@ -180,34 +183,39 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, prof
         for refid, targets in mappings.items():
             fiber_maps[fiber_type][refid] = Table(rows=targets)
     return (exposures, sequence_indices, fiber_maps)
+ 
 
-
-def get_sequence_exposure_numbers(exposures, keys=("fieldid", "plateid", "configid", "imagetyp")):
-    assert len(set(exposures["mjd"])) == 1
-    assert len(set(exposures["observatory"])) == 1
-
-    exposures.sort(("exposure", ))
+def get_sequence_exposure_numbers(exposures, imagetyp, keys, require_contiguous=True):
     
-    exposure_numbers = []    
-    exposures = exposures.group_by(keys)
-    for si, ei in zip(exposures.groups.indices[:-1], exposures.groups.indices[1:]):
-        if exposures["imagetyp"][si] != "Object":
-            continue
-        
-        # require contiguous exposure numbers
-        sub_indices = np.hstack([
-            si,
-            si + (np.where(np.diff(exposures["exposure"][si:ei]) > 1)[0] + 1),
-            ei,
-        ])
-        for sj, ej in zip(sub_indices[:-1], sub_indices[1:]):        
-            exposure_numbers.append(tuple(exposures["exposure"][sj:ej][[0, -1]]))
+    exposures_ = exposures[exposures["imagetyp"] == imagetyp]
+    exposures_.sort(("exposure", ))
+    exposures_ = exposures_.group_by(keys)
+    
+    exposure_numbers = []
+    for si,ei in zip(exposures_.groups.indices[:-1], exposures_.groups.indices[1:]):
+        if require_contiguous:                
+            sub_indices = np.hstack([
+                si,
+                si + (np.where(np.diff(exposures_["exposure"][si:ei]) > 1)[0] + 1),
+                ei,
+            ])
+            for sj, ej in zip(sub_indices[:-1], sub_indices[1:]):        
+                exposure_numbers.append(tuple(exposures_["exposure"][sj:ej][[0, -1]]))        
+        else:
+            exposure_numbers.append(tuple(exposures_["exposure"][si:ei][[0, -1]]))   
+    return exposure_numbers
 
-    return exposure_numbers        
+def get_arclamp_sequence_indices(exposures, **kwargs):
+    sequence_exposure_numbers = get_sequence_exposure_numbers(exposures, imagetyp="ArcLamp", keys=("dithpix", ))
+    sequence_indices = np.searchsorted(exposures["exposure"], sequence_exposure_numbers)
+    if sequence_indices.size > 0:
+        sequence_indices += [0, 1] # to offset the end index
+    return np.sort(sequence_indices, axis=0)
+    
 
 
-def get_sequence_indices(exposures, **kwargs):
-    sequence_exposure_numbers = get_sequence_exposure_numbers(exposures, **kwargs)
+def get_object_sequence_indices(exposures, **kwargs):
+    sequence_exposure_numbers = get_sequence_exposure_numbers(exposures, imagetyp="Object", keys=("fieldid", "plateid", "configid", "imagetyp"), **kwargs)
     sequence_indices = np.searchsorted(exposures["exposure"], sequence_exposure_numbers)
     if sequence_indices.size > 0:
         sequence_indices += [0, 1] # to offset the end index

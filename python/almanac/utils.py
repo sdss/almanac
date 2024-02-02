@@ -80,7 +80,9 @@ def pretty_print_exposures(table, sequence_indices=None, header_color="lightcyan
     )
     n_header = outs["n_header"]      
     if sequence_indices is None:
-        sequence_indices = []  
+        all_sequence_indices = []
+    else:
+        all_sequence_indices = np.vstack(list(sequence_indices.values()))
     
     color_print(lines[1], header_color)
     sequence_colors = cycle(sequence_colors)
@@ -89,8 +91,9 @@ def pretty_print_exposures(table, sequence_indices=None, header_color="lightcyan
         if i < 0:
             color_print(line, header_color)
         else:
+            
             try:
-                j, k = np.where(sequence_indices == i)
+                j, k = np.where(all_sequence_indices == i)
             except:
                 None
             else:

@@ -33,11 +33,20 @@ def _update_almanac(fp, exposures, sequence_indices, fiber_maps, compression=Tru
     
     if len(sequence_indices) > 0:
         delete_hdf5_entry(group, "sequences")
+        sequence_group = group.create_group("sequences")
+        for key, indices in sequence_indices.items():
+            sequence_group.create_dataset(
+                key,
+                data=np.array(exposures["exposure"][indices - [0, 1]])
+            )
+            _print(f"\t{observatory}/{mjd}/sequences/{key}")
+        """
         group.create_dataset(
             "sequences",
             data=np.array(exposures["exposure"][sequence_indices - [0, 1]])
         )
         _print(f"\t{observatory}/{mjd}/sequences")
+        """
 
     for fiber_type, mapping in fiber_maps.items():
         for refid, targets in mapping.items():                
