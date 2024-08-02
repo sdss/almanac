@@ -13,7 +13,8 @@ PLATELIST_DIR = os.environ.get("PLATELIST_DIR", "/uufs/chpc.utah.edu/common/home
 SDSSCORE_DIR = os.environ.get("SDSSCORE_DIR", "/uufs/chpc.utah.edu/common/home/sdss50/software/git/sdss/sdsscore/main/")
 
 YANNY_TARGET_MATCH = re.compile(
-    'STRUCT1 APOGEE_?\w* (?P<target_type>\w+) (?P<source_type>[\w-]+) (?P<target_ra>[\-\+\.\w\d+]+) (?P<target_dec>[\-\+\.\w\d+]+) \d+ \d+ \d+ (?P<fiber_id>\d+) .+ (?P<target_id>"?[\w\d\s\.\-\+]{1,29}"?) [\d ]?(?P<xfocal>[\-\+\.\w\d+]+) (?P<yfocal>[\-\+\.\w\d+]+)$'
+#    'STRUCT1 APOGEE_?\w* (?P<target_type>\w+) (?P<source_type>[\w-]+) (?P<target_ra>[\-\+\.\w\d+]+) (?P<target_dec>[\-\+\.\w\d+]+) \d+ \d+ \d+ (?P<fiber_id>\d+) .+ (?P<target_id>"?[2MASS]+-J?\d+[-+]\d+"?) [\d]? ?(?P<xfocal>[\-\+\.\w\d+]+) (?P<yfocal>[\-\+\.\w\d+]+)$'
+'STRUCT1 APOGEE_?\w* (?P<target_type>\w+) (?P<source_type>[\w-]+) (?P<target_ra>[\-\+\.\w\d+]+) (?P<target_dec>[\-\+\.\w\d+]+) \d+ \d+ \d+ (?P<fiber_id>\d+) .+ (?P<target_id>(NA)|("?[2MAPGS]*-?J{0,2}((\d+(\.\d+)?[-+]?\d+(\.\d+)?)|([\d\w.+_-]{2,29}))(\s+")?)) [\d]? ?(?P<xfocal>[\-\+\.\w\d+]+) (?P<yfocal>[\-\+\.\w\d+]+)$'
 )
 
 RAW_HEADER_KEYS = (
@@ -83,8 +84,12 @@ def _get_meta(path, has_chips=(None, None, None), keys=RAW_HEADER_KEYS, head=20_
     )
     for prefix, has_chip in zip("abc", has_chips):
         headers[f"readout_chip_{prefix}"] = has_chip
+        #headers[f"flag_no_chip_{prefix}_image"] = not has_chip
     
     headers.update(dict(zip(map(str.lower, RAW_HEADER_KEYS), values)))
+    #headers[f"flag_read_from_chip_{headers.pop('chip')}"] = True
+    #for k in ("lampthar", "lampqrtz", "lampune"):
+    #    headers[k] = (headers[k] == "T")
     return headers
 
 def target_id_to_designation(target_id):    
@@ -104,6 +109,8 @@ def get_plate_targets(plate_id):
             if line.startswith("STRUCT1 APOGEE"):
                 target = re.match(YANNY_TARGET_MATCH, line).groupdict()
                 target["target_id"] = target["target_id"].strip(' "')
+                if target["target_id"] in ("None", "mwm_ob_core"):
+                    raise a
                 targets.append(target)  
                 count += 1
                 if count == 500:
@@ -140,6 +147,37 @@ def get_exposure_metadata(observatory: str, mjd: int, **kwargs):
     
     paths = glob(f"{SAS_BASE_DIR}/sdsswork/data/apogee/{observatory}/{mjd}/a?R-*.apz")
     yield from starmap(_get_meta, get_unique_exposure_paths(paths))
+
+def get_exposure_metadata_as_list(observatory: str, mjd: int, **kwargs):
+    """
+    Return a generator of metadata for all exposures taken from a given observatory on a given MJD.
+    """
+    return list(get_exposure_metadata(observatory, mjd))
+
+def parse_exposure_metadata(item: dict) -> dict:
+
+    from almanac.models.apogee import Exposure
+
+    parsed = {**item}
+
+    # Data types
+    for k in ("lampthar", "lampqrtz", "lampune"):
+        parsed[k] = (parsed[k] == "T")
+
+    # Flags
+    for chip in "abc":
+        parsed[f"flag_no_chip_{chip}_image"] = not parsed.pop(f"readout_chip_{chip}")
+
+    parsed[f"flag_read_from_chip_{parsed.pop('chip')}"] = True
+
+    # Translate names:
+    parsed["date_obs"] = parsed.pop("date-obs")
+    for field in Exposure._meta.fields.values():
+        if field.name != field.column_name:
+            parsed[field.name] = parsed.pop(field.column_name)
+
+    return parsed
+
 
 
 def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, profile="operations", **kwargs):
@@ -183,13 +221,16 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, prof
         for refid, targets in mappings.items():
             fiber_maps[fiber_type][refid] = Table(rows=targets)
     return (exposures, sequence_indices, fiber_maps)
- 
+
 
 def get_sequence_exposure_numbers(exposures, imagetyp, keys, require_contiguous=True):
     
     exposures_ = exposures[exposures["imagetyp"] == imagetyp]
     exposures_.sort(("exposure", ))
-    exposures_ = exposures_.group_by(keys)
+    try:
+        exposures_ = exposures_.group_by(keys)
+    except:
+        return np.array([]).reshape((0, 2))
     
     exposure_numbers = []
     for si,ei in zip(exposures_.groups.indices[:-1], exposures_.groups.indices[1:]):
