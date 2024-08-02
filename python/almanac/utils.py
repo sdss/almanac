@@ -21,12 +21,18 @@ def get_current_mjd():
 def datetime_to_mjd(date):
     return int(timestamp_to_mjd(datetime.strptime(date, "%Y-%m-%d").timestamp()))
 
-def parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end, earliest_mjd=0):
+def parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end, all_time=False, earliest_mjd=0):
+
     has_mjd_range = (mjd_start is not None or mjd_end is not None)
     has_date_range = (date_start is not None or date_end is not None)
     
     current_mjd = get_current_mjd()
     n_given = sum([has_mjd_range, has_date_range, mjd is not None, date is not None])
+    if all_time and n_given > 0:
+        raise ValueError("Cannot specify --all and any other --mjd, --mjd-start/--mjd-end, --date, --date-start/--date-end")
+    
+    if all_time:        
+        return range(earliest_mjd, 1 + current_mjd)
     if n_given > 1:
         raise ValueError("Cannot specify more than one of --mjd, --mjd-start/--mjd-end, --date, --date-start/--date-end")
     if n_given == 0:
