@@ -43,7 +43,7 @@ RAW_HEADER_KEYS = (
     "TLSDETB",
 )
 
-def _parse_hexdump_headers(output, keys, default=""):
+def _parse_hexdump_headers(output, keys, default=None):
     meta = [default] * len(keys)
     for line in output:
         try:
@@ -154,6 +154,7 @@ def get_exposure_metadata_as_list(observatory: str, mjd: int, **kwargs):
     """
     return list(get_exposure_metadata(observatory, mjd))
 
+
 def parse_exposure_metadata(item: dict) -> dict:
 
     from almanac.models.apogee import Exposure
@@ -161,8 +162,16 @@ def parse_exposure_metadata(item: dict) -> dict:
     parsed = {**item}
 
     # Data types
-    for k in ("lampthar", "lampqrtz", "lampune"):
-        parsed[k] = (parsed[k] == "T")
+    lamp_keys = ("lampthar", "lampqrtz", "lampune")
+    for k in lamp_keys:
+        if parsed[k] is not None:
+            parsed[k] = (parsed[k] == "T")
+
+    # Special case requested by Sayjdari:
+    # if - false for three lamps and it is arclamp, that almost always means FPI
+    all_lamps_off = all([(parsed[k] is not None and parsed[k] == True) for k in lamp_keys])
+    if (all_lamps_off and (parsed["imagetyp"] == "ArcLamp")):
+        parsed["imagetyp"] = "FPI"
 
     # Flags
     for chip in "abc":
@@ -170,7 +179,7 @@ def parse_exposure_metadata(item: dict) -> dict:
 
     parsed[f"flag_read_from_chip_{parsed.pop('chip')}"] = True
 
-    # Translate names:
+    # Translate field names based on the data model
     parsed["date_obs"] = parsed.pop("date-obs")
     for field in Exposure._meta.fields.values():
         if field.name != field.column_name:
