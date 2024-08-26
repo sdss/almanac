@@ -108,6 +108,7 @@ def sync(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, all_tim
                 )
 
     # Create sequences based on all exposures
+    # TODO: restrict this to MJDs/observatory where we have no sequences?
     sq = (
         Exposure
         .select(
@@ -171,15 +172,7 @@ def sync(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, all_tim
             .execute()
         )
         
-    # Get a sequence of internal flats
-    internal = (
-        Sequence
-        .select()
-        .where(Sequence.exp_type == "INTERNALFLAT")
-        .where(Sequence.n_exposures >= 30)
-    )
-    
-    raise a
+    # Now get fiber information where we need it.
 
 if __name__ == '__main__':
     sync()
