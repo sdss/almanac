@@ -1,7 +1,7 @@
 
 
 
-def get_database_and_schema(path=":memory:"):
+def get_sqlite_database_and_schema(path=":memory:"):
     """
     Return a database and schema for all base models.
 
@@ -24,3 +24,17 @@ def get_database_and_schema(path=":memory:"):
     schema = None
     return (database, schema)
 
+
+
+def get_postgresql_database_and_schema(**kwargs):
+    from peewee import PostgresqlDatabase
+
+    database = PostgresqlDatabase(
+        "sdss5db",
+        user="u6020307",
+        host="pipelines.sdss.org",
+    )
+    return (database, "almanac")
+
+
+get_database_and_schema = get_postgresql_database_and_schema

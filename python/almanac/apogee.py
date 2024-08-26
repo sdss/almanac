@@ -87,6 +87,7 @@ def _get_meta(path, has_chips=(None, None, None), keys=RAW_HEADER_KEYS, head=20_
         #headers[f"flag_no_chip_{prefix}_image"] = not has_chip
     
     headers.update(dict(zip(map(str.lower, RAW_HEADER_KEYS), values)))
+
     #headers[f"flag_read_from_chip_{headers.pop('chip')}"] = True
     #for k in ("lampthar", "lampqrtz", "lampune"):
     #    headers[k] = (headers[k] == "T")
@@ -158,6 +159,7 @@ def get_exposure_metadata_as_list(observatory: str, mjd: int, **kwargs):
 def parse_exposure_metadata(item: dict) -> dict:
 
     from almanac.models.apogee import Exposure
+    from peewee import IntegerField
 
     parsed = {**item}
 
@@ -174,16 +176,32 @@ def parse_exposure_metadata(item: dict) -> dict:
         parsed["imagetyp"] = "FPI"
 
     # Flags
+    flags = { f"flag_read_from_chip_{parsed.pop('chip')}": True }
     for chip in "abc":
-        parsed[f"flag_no_chip_{chip}_image"] = not parsed.pop(f"readout_chip_{chip}")
+        flags[f"flag_no_chip_{chip}_image"] = not parsed.pop(f"readout_chip_{chip}")
 
-    parsed[f"flag_read_from_chip_{parsed.pop('chip')}"] = True
+    # Annoyingly need to do this so that we can insert_many and handle on-conflicts with grace,
+    # and doing that means we cannot supply any flag_* keywords when we use insert_many()
+    f = Exposure(**flags)
+    parsed.update(
+        info_flags=f.info_flags,
+        warn_flags=f.warn_flags
+    )
 
     # Translate field names based on the data model
     parsed["date_obs"] = parsed.pop("date-obs")
     for field in Exposure._meta.fields.values():
         if field.name != field.column_name:
             parsed[field.name] = parsed.pop(field.column_name)
+
+
+        # Set integer-type fields to None if they are empty strings in headers
+        if isinstance(field, IntegerField) and parsed.get(field.name, None) == "":
+            parsed[field.name] = None
+
+        # If Seeing is 'NAN.0', 
+        if field.name == 'seeing' and str(parsed[field.name]).lower().startswith("nan."):
+            parsed[field.name] = np.nan
 
     return parsed
 

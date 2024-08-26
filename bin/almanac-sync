@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from multiprocessing import cpu_count
+
 import click
 @click.command()
 @click.option('-v', '--verbosity', count=True, help="Verbosity level")
@@ -12,30 +14,32 @@ import click
 @click.option('--all', "all_time", is_flag=True, help="Include all MJDs")
 @click.option('--apo', is_flag=True, help="Query Apache Point Observatory data")
 @click.option('--lco', is_flag=True, help="Query Las Campanas Observatory data")
-@click.option('--processes', '-p', default=None, type=int, help="Number of processes to use")
+@click.option('--processes', '-p', default=cpu_count(), type=int, help="Number of processes to use")
 def sync(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, all_time, apo, lco, processes):
     """
     Scrape metadata from raw exposures and update the almanac database.
     """
-            
+    
+    from peewee import chunked, fn
     from tqdm import tqdm
     from itertools import product
 
     from almanac import (apogee, io, utils)
-    from almanac.models.apogee import Exposure
+    from almanac.models.apogee import Exposure, Sequence
 
-    Exposure.create_table()
+    from almanac.models.base import database
 
-    tqdm_kwds = dict(disable=(verbosity < 1))
+    database.create_tables([Exposure, Sequence])
+
+    tqdm_kwds = dict(unit="night", disable=(verbosity < 1))
     
     mjds = utils.parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end, all_time, earliest_mjd=55139) # APOGEE specific
     observatories = utils.get_observatories(apo, lco)
     iterable = product(observatories, mjds)    
 
     # TODO: Skip over observatory/mjds for which we already have something in the Exposure table?
-
-    exposures = []
-    if processes is not None:
+    exposure_kwds = []
+    if processes is not None and processes > 1:         
         # Parallel
         import os
         import signal
@@ -52,7 +56,7 @@ def sync(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, all_tim
                         r = future.result()
                         if r is None or len(r) == 0: 
                             continue                
-                        exposures.extend([Exposure(**apogee.parse_exposure_metadata(item)) for item in r])
+                        exposure_kwds.extend(list(map(apogee.parse_exposure_metadata, r)))
 
                 except KeyboardInterrupt:
                     for pid in pool._processes:
@@ -63,13 +67,119 @@ def sync(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, all_tim
     else:
         for observatory, mjd in tqdm(iterable, total=len(mjds) * len(observatories), **tqdm_kwds):
             for result in apogee.get_exposure_metadata(observatory, mjd):
-                exposures.append(Exposure(**apogee.parse_exposure_metadata(result)))
+                exposure_kwds.append(apogee.parse_exposure_metadata(result))
 
     # Bulk create the exposures.
-    Exposure.bulk_create(exposures, batch_size=1_000)
+    # On conlict, update everything except the unique keys
 
-    # Create visits based on all exposures
+    conflict_target = (
+        Exposure.observatory,
+        Exposure.mjd,
+        Exposure.exposure,
+        Exposure.prefix
+    )
+    ignore_field_names = [t.name for t in conflict_target]
+    preserve_fields = list(
+        field
+        for field in Exposure._meta.fields.values()
+        if field.name not in ignore_field_names
+    )
+
+    batch_size = 1_000
+    for chunk in chunked(exposure_kwds, batch_size):
+        try:
+            (
+                Exposure
+                .insert_many(chunk)
+                .on_conflict(
+                    conflict_target=conflict_target,
+                    preserve=preserve_fields
+                )
+                .execute()
+            )
+        except:
+            # Save each exposure individually to forcibly re-raise the relevant exception
+            for kwds in chunk:
+                (
+                    Exposure
+                    .insert(**kwds)
+                    .on_conflict()
+                    .execute()
+                )
+
+    # Create sequences based on all exposures
+    sq = (
+        Exposure
+        .select(
+            (
+                (
+                    fn.row_number()
+                    .over(
+                        partition_by=[Exposure.mjd, Exposure.observatory],
+                        order_by=[Exposure.exposure]
+                    )
+                )
+                - 
+                (
+                    fn.row_number()
+                    .over(
+                        partition_by=[Exposure.mjd, Exposure.observatory, Exposure.exp_type],
+                        order_by=[Exposure.exposure]
+                    )
+                )        
+            ).alias("group_index"),
+            Exposure.pk,
+            Exposure.mjd,
+            Exposure.observatory,
+            Exposure.exposure,
+            Exposure.exp_type,
+        )
+        .where(Exposure.exp_type.is_null(False))
+        .order_by(
+            Exposure.mjd.asc(),
+            Exposure.observatory.asc(),
+            Exposure.exposure.asc()
+        )
+        .alias("sq")
+    )
+
+    q = (
+        Exposure
+        .select(
+            Exposure.mjd,
+            Exposure.exp_type,
+            Exposure.observatory,
+            fn.min(Exposure.exposure).alias("first_exposure"),
+            fn.max(Exposure.exposure).alias("last_exposure"),
+            fn.count(Exposure.pk).alias("n_exposures")
+        )
+        .join(sq, on=(sq.c.pk == Exposure.pk))
+        .group_by(Exposure.mjd, Exposure.exp_type, sq.c.group_index)
+        .order_by(Exposure.mjd, fn.min(Exposure.exposure))
+        .dicts()
+    )
+
+    sequence_fields = [Sequence.mjd, Sequence.exp_type, Sequence.first_exposure, Sequence.last_exposure]
+    for chunk in chunked(q, batch_size):
+        (
+            Sequence
+            .insert_many(chunk)
+            .on_conflict(
+                conflict_target=sequence_fields,
+                preserve=sequence_fields
+            )
+            .execute()
+        )
+        
+    # Get a sequence of internal flats
+    internal = (
+        Sequence
+        .select()
+        .where(Sequence.exp_type == "INTERNALFLAT")
+        .where(Sequence.n_exposures >= 30)
+    )
     
+    raise a
 
 if __name__ == '__main__':
     sync()
