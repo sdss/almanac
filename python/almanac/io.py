@@ -59,10 +59,11 @@ def _update_almanac(fp, exposures, sequence_indices, fiber_maps, compression=Tru
         for refid, targets in mapping.items():                
             g = get_or_create_group(group, f"fibers/{fiber_type}")
             delete_hdf5_entry(group, f"fibers/{fiber_type}/{refid}")
+
             write_table_hdf5(
                 targets,
                 g,
-                refid,
+                path=refid,
                 compression=compression,
             )             
                             
@@ -70,7 +71,6 @@ def _update_almanac(fp, exposures, sequence_indices, fiber_maps, compression=Tru
         
 
 def write_almanac(output, results, **kwargs):
-    
     with h5.File(output, "a") as fp:
         for args in tqdm(results, desc=f"Updating {output}"):
             _update_almanac(fp, *args, **kwargs)

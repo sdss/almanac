@@ -114,7 +114,6 @@ def get_plate_targets(plate_id):
 
 # get FPS plug info
 def get_confSummary_path(observatory, config_id):
-    print("get_confSummary_path", observatory, config_id)
     # we want the confSummaryFS file. The F means that is has the actual robot positions measured
     # measured by the field view camera. The S means that that it has Jose's estimate of whether
     # unassigned APOGEE fibers can be used as sky.
@@ -129,6 +128,7 @@ def get_confSummary_path(observatory, config_id):
     path = f"{directory}/confSummaryFS-{config_id}.par"
     if not os.path.exists(path):
         path = f"{directory}/confSummary-{config_id}.par"
+    print("confSummary(FS) path: ", path)
 
     return path
 
@@ -180,6 +180,9 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, prof
     if fibers:
         configids = set(exposures["configid"]).difference({"", "-1", "-999"})
         plateids = set(exposures["plateid"]).difference({"", "0", "-1"}) # plate ids often 0
+        # make sure neither set contains None
+        configids.discard(None)
+        plateids.discard(None)
         
         if (plateids or configids) and xmatch:
             try:
