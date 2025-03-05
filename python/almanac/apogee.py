@@ -122,7 +122,24 @@ def get_plate_targets(plate_id):
 
 # get FPS plug info
 def get_confSummary_path(observatory, config_id):
-    return f"{SDSSCORE_DIR}/{observatory}/summary_files/{str(config_id)[:-2].zfill(4)}XX/confSummary-{config_id}.par"
+    # we want the confSummaryFS file. The F means that is has the actual robot positions measured
+    # measured by the field view camera. The S means that that it has Jose's estimate of whether
+    # unassigned APOGEE fibers can be used as sky.
+
+    # config_ids are left-padded to 6 digits and foldered by the first 3 and first 4 digits.
+    # the final file name does not used the padded config_id
+    # For example config_id 1838 is in summary_files/001XXX/0018XX/confSummaryFS-1838.par
+    c = str(config_id)
+    directory = f"{SDSSCORE_DIR}/{observatory}/summary_files/{c[:-3].zfill(3)}XXX/{c[:-2].zfill(4)}XX/"
+
+    # fall back to confSummary if confSummaryFS does not exist
+    path = f"{directory}/confSummaryFS-{config_id}.par"
+    if not os.path.exists(path):
+        path = f"{directory}/confSummary-{config_id}.par"
+    print("confSummary(FS) path: ", path)
+
+    return path
+
     
 def get_fps_targets(observatory, config_id):
     lkeys = "_, positionerId, holeId, fiberType, assigned, on_target, valid, decollided, xwok, ywok, zwok, xFocal, yFocal, alpha, beta, racat,  deccat, pmra, pmdex, parallax, ra, dec, lambda_eff, coord_epoch, spectrographId, fiberId".split(", ")
@@ -228,6 +245,9 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, prof
     if fibers:
         configids = set(exposures["configid"]).difference({"", "-1", "-999"})
         plateids = set(exposures["plateid"]).difference({"", "0", "-1"}) # plate ids often 0
+        # make sure neither set contains None
+        configids.discard(None)
+        plateids.discard(None)
         
         if (plateids or configids) and xmatch:
             try:
