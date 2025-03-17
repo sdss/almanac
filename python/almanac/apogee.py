@@ -206,8 +206,12 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, prof
  
 
 def get_sequence_exposure_numbers(exposures, imagetyp, keys, require_contiguous=True):
-    
     exposures_ = exposures[exposures["imagetyp"] == imagetyp]
+
+    # if there are no exposures of type imagetyp, return an empty list
+    # not returning early will cause the _group_by to fail
+    if len(exposures_) == 0:
+        return []
     exposures_.sort(("exposure", ))
     exposures_ = exposures_.group_by(keys)
     
