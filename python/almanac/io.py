@@ -42,7 +42,7 @@ def _update_almanac(fp, exposures, sequence_indices, fiber_maps, compression=Tru
         delete_hdf5_entry(group, "sequences")
         sequence_group = group.create_group("sequences")
         for key, indices in sequence_indices.items():
-            if indices:
+            if indices.size > 0:
                 sequence_group.create_dataset(
                     key,
                     data=np.array(exposures["exposure"][indices - [0, 1]])
