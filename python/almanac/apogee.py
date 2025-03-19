@@ -282,10 +282,10 @@ def get_fps_fiber_maps(observatory, config_ids, xmatch=True):
             targets = []
             print("\tCould not get FPS targets for config_id", config_id)
 
-        if xmatch and len(targets) > 0:
-            # cross-match to the SDSS database
-            catalogids = set([target["catalogid"] for target in targets])
-            
+        catalogids = set([target["catalogid"] for target in targets]).difference({'""'})
+
+        if xmatch and len(catalogids) > 0:
+            # cross-match to the SDSS database            
             q = (
                 catalogdb.SDSS_ID_flat
                 .select(
