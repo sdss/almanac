@@ -23,18 +23,16 @@ def main(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lc
     The almanac extracts metadata from raw APOGEE exposures (including fiber mappings)
     and finds sequences of exposures that form individual visits.
     """    
-    
-    if output is None and verbosity == 0:
-        click.echo("No output file specified. Increasing verbosity to print to stdout.")
-        verbosity = 2
-        
+
     from tqdm import tqdm
     from itertools import product
-
     from almanac import (apogee, io, utils)
 
     tqdm_kwds = dict(disable=(verbosity < 1))
 
+    if output is None and verbosity == 0:
+        verbosity = 2
+        
     show_exposure_columns = exposure_columns.split(",")
     show_fps_columns = fps_columns.split(",")
     show_plate_columns = plate_columns.split(",")
