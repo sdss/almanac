@@ -159,17 +159,80 @@ def get_exposure_metadata(observatory: str, mjd: int, **kwargs):
     yield from starmap(_get_meta, get_unique_exposure_paths(paths))
 
 
+def sort_and_insert_missing_exposures(exposures, require_exposures_start_at_1=True, **kwargs):
+    """
+    Identify any missing exposures (based on non-contiguous exposure numbers) and fill them with missing image types.
+    """
+    missing_row_template = dict(
+        #observatory=exposures["observatory"][0],
+        #mjd=exposures["mjd"][0],
+        prefix="apR",
+        chip="",
+        readout_chip_a=False,
+        readout_chip_b=False,
+        readout_chip_c=False,
+        fieldid="-1",
+        designid="-1",
+        configid="-1",
+        seeing="",
+        exptype="MISSING",
+        nread="0",
+        imagetyp="Missing",
+        lampqrtz="F",
+        lampthar="F",
+        lampune="F",
+        focus="",
+        name="",
+        plateid="",
+        cartid="",
+        mapid="",
+        platetyp="",
+        obscmt="",
+        collpist="",
+        colpitch="",
+        dithpix="",
+        tcammid="",
+        tlsdetb=""
+    )
+    missing_row_template.update(kwargs)
+
+    corrected = []
+    last_exposure_id = 0
+    for i, exposure in enumerate(sorted(exposures, key=lambda x: x["exposure"])):
+        if i == 0:
+            last_exposure_id = exposure["exposure"]
+            if require_exposures_start_at_1:
+                last_exposure_id = int(str(last_exposure_id)[:4] + "0001")
+
+        for n in range(last_exposure_id + 1, exposure["exposure"]):
+            corrected.append(
+                dict(
+                    exposure=n, 
+                    observatory=exposure["observatory"],
+                    mjd=exposure["mjd"],
+                    **missing_row_template
+                )
+            )        
+        corrected.append(exposure)
+        last_exposure_id = exposure["exposure"]
+    
+    return corrected
+        
+
+
+
 def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, profile="operations", **kwargs):
     """
     Return a generator of metadata for all exposures taken from a given observatory on a given MJD.
     """
 
-    exposures = get_exposure_metadata(observatory, mjd, **kwargs)
-            
-    exposures = Table(rows=list(exposures))
+    exposures = sort_and_insert_missing_exposures(
+        get_exposure_metadata(observatory, mjd, **kwargs)
+    )
     if len(exposures) == 0: 
         return None
-    exposures.sort(("exposure", ))
+
+    exposures = Table(rows=list(exposures))
     
     sequence_indices = {
         "objects": get_object_sequence_indices(exposures),
