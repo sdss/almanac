@@ -70,7 +70,13 @@ def pretty_print_targets(targets, fiber_type, refid, header_color="lightcyan", i
     print("\n")    
 
 
-def pretty_print_exposures(table, sequence_indices=None, header_color="lightcyan", sequence_colors=("lightgreen", "yellow")):
+def pretty_print_exposures(
+        table, 
+        sequence_indices=None, 
+        header_color="lightcyan", 
+        sequence_colors=("lightgreen", "yellow"),
+        missing_color="red",
+    ):
     
     observatory, mjd = table["observatory"][0], table["mjd"][0]
     color_print(f"{len(table)} exposures from {observatory.upper()} on MJD {mjd}:", header_color)
@@ -111,7 +117,10 @@ def pretty_print_exposures(table, sequence_indices=None, header_color="lightcyan
             if in_sequence:
                 color_print(line, sequence_color)
             else:                     
-                print(line)
+                if line.find("Missing") > -1:
+                    color_print(line, missing_color)
+                else:
+                    print(line)
     
     color_print(lines[1], header_color)    
     print("\n")
