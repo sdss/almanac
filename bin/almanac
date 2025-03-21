@@ -32,7 +32,6 @@ def main(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lc
     from itertools import product
 
     from almanac import (apogee, io, utils)
-    print(apogee.__file__)
 
     tqdm_kwds = dict(disable=(verbosity < 1))
 
