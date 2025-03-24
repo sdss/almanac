@@ -144,6 +144,7 @@ def get_fps_targets(observatory, config_id):
                 lvalues = line.split(" ", len(lkeys))[:-1]
                 rvalues = line.strip().rsplit(" ", len(rkeys))[1:]
                 target = dict(zip(lkeys + rkeys, lvalues + rvalues))
+                target["catalogid"] = target["catalogid"].strip('"') # if catalogid is just "", strip it
                 if target["fiberType"] == "APOGEE":
                     targets.append(target)                 
     return targets
@@ -345,7 +346,7 @@ def get_fps_fiber_maps(observatory, config_ids, xmatch=True):
             targets = []
             print("\tCould not get FPS targets for config_id", config_id)
 
-        catalogids = set([target["catalogid"] for target in targets]).difference({'""'})
+        catalogids = set([target["catalogid"] for target in targets]).difference({''})
 
         if xmatch and len(catalogids) > 0:
             # cross-match to the SDSS database            
