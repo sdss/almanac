@@ -84,11 +84,11 @@ def pretty_print_exposures(
     lines, outs = table.formatter._pformat_table(
         table, -1, max_width=None, show_name=True, show_unit=None, show_dtype=False, align=None
     )
-    n_header = outs["n_header"]      
+    n_header = outs["n_header"]
     if sequence_indices is None:
         all_sequence_indices = []
     else:
-        all_sequence_indices = np.vstack(list(sequence_indices.values()))
+        all_sequence_indices = np.vstack([v for v in sequence_indices.values() if len(v) > 0])
     
     color_print(lines[1], header_color)
     sequence_colors = cycle(sequence_colors)
