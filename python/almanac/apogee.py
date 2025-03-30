@@ -7,6 +7,18 @@ from itertools import starmap
 from tqdm import tqdm
 from astropy.table import Table
 
+from almanac import utils # ensures the Yanny table reader/writer is registered
+
+try:
+    from sdssdb.peewee.sdss5db.catalogdb import database
+    assert database.set_profile("operations")
+    from sdssdb.peewee.sdss5db.catalogdb import (SDSS_ID_flat, TwoMassPSC, CatalogToTwoMassPSC)
+except e:
+    print(f"Exception trying to connect to SDSS-5 database: {e}")
+    SDSS5_DATABASE_AVAILABLE = False
+else:
+    SDSS5_DATABASE_AVAILABLE = True
+
 
 SAS_BASE_DIR = os.environ.get("SAS_BASE_DIR", "/uufs/chpc.utah.edu/common/home/sdss/")
 PLATELIST_DIR = os.environ.get("PLATELIST_DIR", "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/")
@@ -134,22 +146,18 @@ def get_confSummary_path(observatory, config_id):
 
     
 def get_fps_targets(observatory, config_id):
-    lkeys = "_, positionerId, holeId, fiberType, assigned, on_target, valid, decollided, xwok, ywok, zwok, xFocal, yFocal, alpha, beta, racat,  deccat, pmra, pmdex, parallax, ra, dec, lambda_eff, coord_epoch, spectrographId, fiberId".split(", ")
-    rkeys = "catalogid, carton_to_target_pk, cadence, firstcarton, program, category, sdssv_boss_target0, sdssv_apogee_target0, delta_ra, delta_dec".split(", ")
-            
-    targets = []
-    with open(get_confSummary_path(observatory, config_id), "r") as fp:
-        for line in fp:
-            if line.startswith("FIBERMAP"):
-                lvalues = line.split(" ", len(lkeys))[:-1]
-                rvalues = line.strip().rsplit(" ", len(rkeys))[1:]
-                target = dict(zip(lkeys + rkeys, lvalues + rvalues))
-                target["catalogid"] = target["catalogid"].strip('"') # if catalogid is just "", strip it
-                if target["fiberType"] == "APOGEE":
-                    targets.append(target)                 
-    return targets
+    """
+    Return a list of dicts containing the target information for the given `observatory` and `config_id`.
 
-
+    :param observatory: 
+        The observatory name (e.g. "apo").
+    :param config_id: 
+        The configuration ID.
+    """
+    t = Table.read(get_confSummary_path(observatory, config_id), format="yanny", tablename="FIBERMAP")
+    t = t[t["fiberType"] == "APOGEE"] # restrict to APOGEE fibers
+    return [dict(zip(t.colnames, row)) for row in t]
+    
 
 def get_exposure_metadata(observatory: str, mjd: int, **kwargs):
     """
@@ -222,7 +230,7 @@ def sort_and_insert_missing_exposures(exposures, require_exposures_start_at_1=Tr
 
 
 
-def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, profile="operations", **kwargs):
+def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, **kwargs):
     """
     Return a generator of metadata for all exposures taken from a given observatory on a given MJD.
     """
@@ -247,19 +255,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, prof
         # make sure neither set contains None
         configids.discard(None)
         plateids.discard(None)
-        
-        if (plateids or configids) and xmatch:
-            try:
-                from sdssdb.peewee.sdss5db import catalogdb
-            except ImportError:
-                # TODO use warnings instead
-                print("Could not import `sdssdb`: have you run `module load sdssdb`?")                
-                xmatch = False
-            else:            
-                if not catalogdb.database.set_profile(profile):
-                    print(f"Could not connect to SDSS database (profile={profile}). Do you have the necessary entries in your `~/.pgpass` file?")
-                    xmatch = False
-        
+                
         fiber_maps["fps"].update(get_fps_fiber_maps(observatory, configids, **kwargs))
         fiber_maps["plates"].update(get_plate_fiber_maps(plateids, **kwargs))
     
@@ -336,8 +332,6 @@ def get_fps_fiber_maps(observatory, config_ids, xmatch=True):
     if not config_ids:
         return fps_fiber_maps
     
-    from sdssdb.peewee.sdss5db import catalogdb
-    
     # All FPS targets will have a catalogid, so we will xmatch to database with that (if we need)
     for config_id in config_ids:
         try:
@@ -346,22 +340,22 @@ def get_fps_fiber_maps(observatory, config_ids, xmatch=True):
             targets = []
             print("\tCould not get FPS targets for config_id", config_id)
 
-        catalogids = set([target["catalogid"] for target in targets]).difference({''})
+        catalogids = set([target["catalogid"] for target in targets]).difference({-999, -1, ""})
 
-        if xmatch and len(catalogids) > 0:
+        if xmatch and len(catalogids) > 0 and SDSS5_DATABASE_AVAILABLE:
             # cross-match to the SDSS database            
             q = (
-                catalogdb.SDSS_ID_flat
+                SDSS_ID_flat
                 .select(
-                    catalogdb.SDSS_ID_flat.sdss_id,
-                    catalogdb.SDSS_ID_flat.catalogid
+                    SDSS_ID_flat.sdss_id,
+                    SDSS_ID_flat.catalogid
                 )
-                .where(catalogdb.SDSS_ID_flat.catalogid.in_(tuple(catalogids)))
+                .where(SDSS_ID_flat.catalogid.in_(tuple(catalogids)))
                 .tuples()
             )
             sdss_id_lookup = {}
             for sdss_id, catalogid in q:
-                sdss_id_lookup[str(catalogid)] = sdss_id
+                sdss_id_lookup[catalogid] = sdss_id
             
             for target in targets:
                 target["sdss_id"] = sdss_id_lookup.get(target["catalogid"], -1)
@@ -379,8 +373,6 @@ def get_plate_fiber_maps(plate_ids, xmatch=True):
     if not plate_ids:
         return plate_fiber_maps
         
-    from sdssdb.peewee.sdss5db import catalogdb
-
     for plate_id in plate_ids:
         try:
             targets = get_plate_targets(plate_id)
@@ -388,19 +380,19 @@ def get_plate_fiber_maps(plate_ids, xmatch=True):
             targets = []
             print("\tCould not get plate targets for plate_id", plate_id)
             
-        if xmatch and len(targets) > 0:
+        if xmatch and len(targets) > 0 and SDSS5_DATABASE_AVAILABLE:
             # cross-match to the SDSS database            
             designations = set(tuple(map(target_id_to_designation, (target["target_id"] for target in targets))))
             
             q = (
-                catalogdb.SDSS_ID_flat
+                SDSS_ID_flat
                 .select(
-                    catalogdb.SDSS_ID_flat.sdss_id,
-                    catalogdb.TwoMassPSC.designation
+                    SDSS_ID_flat.sdss_id,
+                    TwoMassPSC.designation
                 )
-                .join(catalogdb.CatalogToTwoMassPSC, on=(catalogdb.SDSS_ID_flat.catalogid == catalogdb.CatalogToTwoMassPSC.catalogid))
-                .join(catalogdb.TwoMassPSC, on=(catalogdb.CatalogToTwoMassPSC.target_id == catalogdb.TwoMassPSC.pts_key))
-                .where(catalogdb.TwoMassPSC.designation.in_(tuple(designations)))
+                .join(CatalogToTwoMassPSC, on=(SDSS_ID_flat.catalogid == CatalogToTwoMassPSC.catalogid))
+                .join(TwoMassPSC, on=(CatalogToTwoMassPSC.target_id == TwoMassPSC.pts_key))
+                .where(TwoMassPSC.designation.in_(tuple(designations)))
                 .tuples()                    
             )
             

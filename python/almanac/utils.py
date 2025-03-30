@@ -1,8 +1,16 @@
 import numpy as np
 from time import time
 from datetime import datetime
-from astropy.utils.console import color_print
 from itertools import cycle
+from astropy.table import Table
+from astropy.utils.console import color_print
+from astropy.io.registry import (register_identifier, register_reader, register_writer)
+from pydl.pydlutils.yanny import (is_yanny, read_table_yanny, write_table_yanny)
+
+register_identifier('yanny', Table, is_yanny)
+register_reader('yanny', Table, read_table_yanny)
+register_writer('yanny', Table, write_table_yanny)
+
 
 def get_observatories(apo, lco):
     if apo and not lco:
