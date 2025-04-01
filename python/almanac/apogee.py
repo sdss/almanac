@@ -13,7 +13,7 @@ try:
     from sdssdb.peewee.sdss5db.catalogdb import database
     assert database.set_profile("operations")
     from sdssdb.peewee.sdss5db.catalogdb import (SDSS_ID_flat, TwoMassPSC, CatalogToTwoMassPSC)
-except e:
+except Exception as e:
     print(f"Exception trying to connect to SDSS-5 database: {e}")
     SDSS5_DATABASE_AVAILABLE = False
 else:
