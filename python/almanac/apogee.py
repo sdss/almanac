@@ -155,7 +155,6 @@ def get_fps_targets(observatory, config_id):
         The configuration ID.
     """
     t = Table.read(get_confSummary_path(observatory, config_id), format="yanny", tablename="FIBERMAP")
-    t = t[t["fiberType"] == "APOGEE"] # restrict to APOGEE fibers
     return [dict(zip(t.colnames, row)) for row in t]
     
 
