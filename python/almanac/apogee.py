@@ -349,7 +349,10 @@ def get_fps_fiber_maps(observatory, config_ids, xmatch=True):
                     SDSS_ID_flat.sdss_id,
                     SDSS_ID_flat.catalogid
                 )
-                .where(SDSS_ID_flat.catalogid.in_(tuple(catalogids)))
+                .where(
+                    SDSS_ID_flat.catalogid.in_(tuple(catalogids))
+                &   (SDSS_ID_flat.rank == 1)
+                )
                 .tuples()
             )
             sdss_id_lookup = {}
