@@ -335,9 +335,10 @@ def get_fps_fiber_maps(observatory, config_ids, xmatch=True):
     for config_id in config_ids:
         try:
             targets = get_fps_targets(observatory, config_id)
-        except:
+        except Exception as e:
+            # Print an informative exception
+            print(f"\tCould not get FPS targets for config_id {config_id}: {e}")
             targets = []
-            print("\tCould not get FPS targets for config_id", config_id)
 
         catalogids = set([target["catalogid"] for target in targets]).difference({-999, -1, ""})
 
@@ -378,9 +379,10 @@ def get_plate_fiber_maps(plate_ids, xmatch=True):
     for plate_id in plate_ids:
         try:
             targets = get_plate_targets(plate_id)
-        except:
+        except Exception as e:
+            # Print a useful exception
+            print(f"\tCould not get plate targets for plate_id {plate_id}: {e}")
             targets = []
-            print("\tCould not get plate targets for plate_id", plate_id)
             
         if xmatch and len(targets) > 0 and SDSS5_DATABASE_AVAILABLE:
             # cross-match to the SDSS database            
