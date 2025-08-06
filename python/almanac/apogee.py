@@ -97,6 +97,8 @@ def _get_meta(path, has_chips=(None, None, None), keys=RAW_HEADER_KEYS, head=20_
         headers[f"readout_chip_{prefix}"] = has_chip
     
     headers.update(dict(zip(map(str.lower, RAW_HEADER_KEYS), values)))
+    if headers["cartid"].strip() == "FPS":
+        headers["cartid"] = 0
     return headers
 
 def target_id_to_designation(target_id):    
