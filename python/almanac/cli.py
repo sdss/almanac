@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 
 import click
-@click.command()
+
+#if ctx.invoked_subcommand is None:
+#        ctx.invoke(query, **ctx.params)
+
+
+@click.group(invoke_without_command=True)
 @click.option('-v', '--verbosity', count=True, help="Verbosity level")
 @click.option('--mjd', default=None, type=int, help="Modified Julian date to query. Use negative values to indicate relative to current MJD.")
 @click.option('--mjd-start', default=None, type=int, help="Start of MJD range to query")
@@ -18,11 +23,19 @@ import click
 @click.option('--exposure-columns', default="observatory,mjd,exposure,lampqrtz,lampthar,lampune,fieldid,plateid,cartid,configid,imagetyp,dithpix", help="Comma-separated list of exposure columns to show", show_default=True)
 @click.option('--fps-columns', default="sdss_id,catalogid,program,category,firstcarton,ra,dec,fiberId", help="Comma-separated list of fiber positioner columns to show", show_default=True)
 @click.option('--plate-columns', default="sdss_id,target_id,target_ra,target_dec,target_type,source_type,fiber_id", help="Comma-separated list of plate columns to show", show_default=True)
-def main(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lco, fibers, no_x_match, output, processes, exposure_columns, fps_columns, plate_columns):
+@click.pass_context
+def main(ctx, verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lco, fibers, no_x_match, output, processes, exposure_columns, fps_columns, plate_columns):
     """
-    The almanac extracts metadata from raw APOGEE exposures (including fiber mappings)
-    and finds sequences of exposures that form individual visits.
+    Almanac collects metadata from planned and actual APOGEE exposures,
+    and identifies sequences of exposures that constitute epoch visits. 
     """    
+
+    # This keeps the default behaviour as 'query mode' but allows for commands like 'config'.
+    if ctx.invoked_subcommand is not None:
+        command = dict(
+            config=config
+        )[ctx.invoked_subcommand]
+        return ctx.invoke(command, **ctx.params)
 
     from tqdm import tqdm
     from itertools import product
@@ -93,6 +106,125 @@ def main(verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lc
 
     if output:
         io.write_almanac(output, results, verbose=(verbosity >= 3))
+
+
+@main.group()
+def config(**kwargs):
+    """View or update configuration settings."""
+    pass
+
+
+@config.command()
+def show(**kwargs):
+    """Show all configuration settings""" 
+    
+    from almanac.config import asdict, config, get_config_path
+    
+    click.echo(f"Configuration path: {get_config_path()}")
+    click.echo(f"Configuration:")
+    
+    def _pretty_print(config_dict, indent=""):
+        for k, v in config_dict.items():
+            if isinstance(v, dict):
+                click.echo(f"{indent}{k}:")
+                _pretty_print(v, indent=indent + "  ")
+            else:
+                click.echo(f"{indent}{k}: {v}")
+
+    _pretty_print(asdict(config), "  ")
+
+
+@config.command
+@click.argument("key", type=str)
+def get(key, **kwargs):
+    """Get a configuration value"""
+
+    from almanac.config import config, asdict
+
+    def traverse(config, key, provenance=None, sep="."):
+        parent, *child = key.split(sep, 1)
+        try:
+            # TODO: Should we even allow dicts in config?
+            if isinstance(config, dict):
+                v = config[parent]
+            else:
+                v = getattr(config, parent)
+        except (AttributeError, KeyError):
+            context = sep.join(provenance or [])
+            if context:
+                context = f" within '{context}'"
+
+            if not isinstance(config, dict):
+                config = asdict(config)
+                        
+            raise click.ClickException(
+                    f"No configuration key '{parent}'{context}. "
+                    f"Available{context}: {', '.join(config.keys())}"
+                )
+
+        provenance = (provenance or []) + [parent]
+        return traverse(v, child[0], provenance) if child else v
+
+
+    value = traverse(config, key)
+    click.echo(value)
+
+@config.command
+@click.argument("key")
+@click.argument("value")
+def set(key, value, **kwargs):
+    """Update a configuration value"""
+
+    from almanac.config import (
+        config, asdict, is_dataclass, get_config_path, ConfigManager
+    )
+
+    def traverse(config, key, value, provenance=None, sep="."):
+        parent, *child = key.split(sep, 1)
+        
+        try:
+            scope = getattr(config, parent)
+        except AttributeError:
+            context = sep.join(provenance or [])
+            if context:
+                context = f" within '{context}'"
+
+            if not isinstance(config, dict):
+                config = asdict(config)
+
+            raise click.ClickException(
+                f"No configuration key '{parent}'{context}. "
+                f"Available{context}: {', '.join(config.keys())}"
+            )
+
+        else:
+
+            if not child:
+
+                fields = {f.name: f.type for f in config.__dataclass_fields__.values()}
+                field_type = fields[parent]
+                if is_dataclass(field_type):
+                    context = sep.join(provenance or [])
+                    if context:
+                        context = f" within '{context}'"
+
+                    raise click.ClickException(
+                        f"Key '{parent}'{context} refers to a configuration class. "
+                        f"You must set the values of the configuration class individually. "
+                        f"Sorry! "
+                        f"Or you can directly edit the configuration file {get_config_path()}"
+                    )
+            
+                setattr(config, parent, value)
+            else:
+                provenance = (provenance or []) + [parent]
+                traverse(scope, child[0], value)
+
+    traverse(config, key, value)
+    config_path = get_config_path()
+    ConfigManager.save(config, config_path)
+    click.echo(f"Updated configuration {key} to {value} in {config_path}")
+
 
 
 if __name__ == '__main__':

@@ -30,7 +30,8 @@ dependencies = [
     "h5py",
     "tqdm",
     "click",
-    "pydl"
+    "pydl",
+    "sdssdb"
 ]
 
 [project.urls]
