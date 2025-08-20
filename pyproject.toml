@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdss_almanac"
-version = "0.1.5"
+version = "0.1.7"
 authors = [
     { name = "Andy Casey", email = "andrew.casey@monash.edu" }
 ]
@@ -73,7 +73,7 @@ almanac = "almanac.cli:main"
 zip-safe = false
 
 [tool.setuptools.packages.find]
-where = ["python"]
+where = ["src"]
 
 [tool.setuptools.package-data]
 sdss_almanac = ["etc/*"]
@@ -99,7 +99,7 @@ addopts = "--cov almanac --cov-report html -W ignore"
 
 [tool.coverage.run]
 branch = true
-include = ["python/almanac/*"]
+include = ["src/almanac/*"]
 omit = ["*/utils/*.py", "*/__init__.py"]
 
 [tool.coverage.report]
