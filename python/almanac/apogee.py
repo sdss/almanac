@@ -101,23 +101,25 @@ def target_id_to_designation(target_id):
 
 def get_plateHole_path(plate_id):
     plate_id = int(plate_id)
-    return f"{PLATELIST_DIR}/plates/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plateHoles-{plate_id:0>6.0f}.par"
+    path = f"{PLATELIST_DIR}/plates/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plateHoles-{plate_id:0>6.0f}.par"
+    logger.debug(f"plateHole path: {path}")
+    return path
 
 def get_plate_targets(plate_id):
-    targets, count = ([], 0)
+    targets, count, designations = ([], 0, set())
     with open(get_plateHole_path(plate_id), "r") as fp:
         for line in fp:
             if line.startswith("STRUCT1 APOGEE"):
                 target = re.match(YANNY_TARGET_MATCH, line).groupdict()
                 target["target_id"] = target["target_id"].strip(' "')
                 target["sdss_id"] = -1
+                designations.add(target_id_to_designation(target["target_id"]))
                 targets.append(target)  
                 count += 1
                 if count == 500:
                     break
-                
-                
-    return targets
+                                
+    return (designations, targets)
 
 # get FPS plug info
 def get_confSummary_path(observatory, config_id):
@@ -135,23 +137,25 @@ def get_confSummary_path(observatory, config_id):
     path = f"{directory}/confSummaryFS-{config_id}.par"
     if not os.path.exists(path):
         path = f"{directory}/confSummary-{config_id}.par"
-    print("confSummary(FS) path: ", path)
+    logging.debug("confSummary(FS) path: ", path)
 
     return path
 
     
-def get_fps_targets(observatory, config_id):
+def get_fps_targets(config_id, observatory):
     """
     Return a list of dicts containing the target information for the given `observatory` and `config_id`.
 
-    :param observatory: 
-        The observatory name (e.g. "apo").
     :param config_id: 
         The configuration ID.
+
+    :param observatory: 
+        The observatory name (e.g. "apo").
     """
     t = Table.read(get_confSummary_path(observatory, config_id), format="yanny", tablename="FIBERMAP")
     t["sdss_id"] = -1
-    return [dict(zip(t.colnames, row)) for row in t]
+    mapping = [dict(zip(t.colnames, row)) for row in t]
+    return (set(t["catalogid"]), mapping)
     
 
 def get_exposure_metadata(observatory: str, mjd: int, **kwargs):
@@ -301,20 +305,18 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
         # make sure neither set contains None
         configids.discard(None)
         plateids.discard(None)
-        fiber_maps["fps"].update(get_fps_fiber_maps(observatory, configids))
-        fiber_maps["plates"].update(get_plate_fiber_maps(plateids))
+
+        catalogids, fps_fiber_maps = get_fiber_mappings(get_fps_targets, configids, observatory)
+        twomass_designations, plate_fiber_maps = get_fiber_mappings(get_plate_targets, plateids)
+
+        fiber_maps["fps"].update(fps_fiber_maps)
+        fiber_maps["plates"].update(plate_fiber_maps)
 
         if xmatch and is_database_available:
             # Do a single database query and match [2mass/catalogid] -> sdss_id
             # Match fps first.
-            catalogids = set()
-            sdss_id_lookup = {}
-            for _, rows in fiber_maps["fps"].items():
-                for target in rows:
-                    if target["catalogid"] >= 0:
-                        catalogids.add(target["catalogid"])            
-            
             if catalogids:
+                sdss_id_lookup = {}            
                 q = (
                     catalogdb.SDSS_ID_flat
                     .select(
@@ -335,13 +337,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
                         target["sdss_id"] = sdss_id_lookup.get(target["catalogid"], -1)    
 
             # Now match any plate targets.
-            designations = set()
-            sdss_id_lookup = {}
-            for _, targets in fiber_maps["plates"].items():
-                for target in targets:
-                    designations.add(target_id_to_designation(target["target_id"]))
-
-            if designations:
+            if twomass_designations:
                 q = (
                     catalogdb.SDSS_ID_flat
                     .select(
@@ -350,7 +346,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
                     )
                     .join(catalogdb.CatalogToTwoMassPSC, on=(catalogdb.SDSS_ID_flat.catalogid == catalogdb.CatalogToTwoMassPSC.catalogid))
                     .join(catalogdb.TwoMassPSC, on=(catalogdb.CatalogToTwoMassPSC.target_id == catalogdb.TwoMassPSC.pts_key))
-                    .where(catalogdb.TwoMassPSC.designation.in_(tuple(designations)))
+                    .where(catalogdb.TwoMassPSC.designation.in_(tuple(twomass_designations)))
                     .tuples()                    
                 )        
                 for sdss_id, designation in q:
@@ -435,36 +431,13 @@ def get_unique_exposure_paths(paths):
 
     return unique_exposure_paths
 
-    
-def get_fps_fiber_maps(observatory, config_ids):
-    fps_fiber_maps = {}
-    if not config_ids:
-        return fps_fiber_maps
-    
-    for config_id in config_ids:
-        try:
-            targets = get_fps_targets(observatory, config_id)
-        except Exception as e:
-            # Print an informative exception
-            logger.exception(f"\tCould not get FPS targets for config_id {config_id}: {e}")
-            targets = []                          
-        fps_fiber_maps[config_id] = targets
-    return fps_fiber_maps
 
+def get_fiber_mappings(f, iterable, *args):
+    all_ids, mappings = (set(), {})
+    for item in iterable:
+        ids, mapping = f(item, *args)
+        mappings[item] = mapping
+        all_ids.update(ids)
+    return (all_ids, mappings)
 
-def get_plate_fiber_maps(plate_ids):
-    plate_fiber_maps = {}
-    if not plate_ids:
-        return plate_fiber_maps
         
-    for plate_id in plate_ids:
-        try:
-            targets = get_plate_targets(plate_id)
-        except Exception as e:
-            # Print a useful exception
-            print(f"\tCould not get plate targets for plate_id {plate_id}: {e}")
-            targets = []
-        
-        plate_fiber_maps[plate_id] = targets
-    
-    return plate_fiber_maps
