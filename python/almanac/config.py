@@ -1,9 +1,36 @@
+import logging
+import colorlog
 import os
 import yaml
 import warnings
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field, is_dataclass, asdict
 from pathlib import Path
+
+
+handler = colorlog.StreamHandler()
+
+formatter = colorlog.ColoredFormatter(
+    '%(log_color)s%(asctime)s [%(levelname)s] %(message)s',
+    log_colors={
+'DEBUG': 'cyan',
+'INFO': 'white',
+'WARNING': 'yellow',
+'ERROR': 'red',
+'CRITICAL': 'bold_red',
+},
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+handler.setFormatter(formatter)
+
+print("TODO: set logger by config default verbosity")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG) # Set desired logging level
+
+# Add the handler to the logger
+logger.addHandler(handler)
+
 
 @dataclass
 class DatabaseConfig:
@@ -16,6 +43,7 @@ class DatabaseConfig:
 @dataclass
 class Config:
     sdssdb: DatabaseConfig = field(default_factory=DatabaseConfig)
+    database_connect_time_warning: int = 3 # seconds
 
 
 def get_config_path():

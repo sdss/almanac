@@ -31,7 +31,8 @@ dependencies = [
     "tqdm",
     "click",
     "pydl",
-    "sdssdb"
+    "sdssdb",
+    "colorlog"
 ]
 
 [project.urls]
