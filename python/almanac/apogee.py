@@ -9,6 +9,7 @@ from astropy.table import Table
 from typing import Optional, Tuple, Dict
 
 from almanac import utils # ensures the Yanny table reader/writer is registered
+from almanac.config import logger
 
 SAS_BASE_DIR = os.environ.get("SAS_BASE_DIR", "/uufs/chpc.utah.edu/common/home/sdss/")
 PLATELIST_DIR = os.environ.get("PLATELIST_DIR", "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/")
@@ -109,6 +110,7 @@ def get_plate_targets(plate_id):
             if line.startswith("STRUCT1 APOGEE"):
                 target = re.match(YANNY_TARGET_MATCH, line).groupdict()
                 target["target_id"] = target["target_id"].strip(' "')
+                target["sdss_id"] = -1
                 targets.append(target)  
                 count += 1
                 if count == 500:
@@ -148,6 +150,7 @@ def get_fps_targets(observatory, config_id):
         The configuration ID.
     """
     t = Table.read(get_confSummary_path(observatory, config_id), format="yanny", tablename="FIBERMAP")
+    t["sdss_id"] = -1
     return [dict(zip(t.colnames, row)) for row in t]
     
 
@@ -260,14 +263,14 @@ def get_expected_exposure_metadata(observatory: str, mjd: int) -> Dict[int, Dict
     return { r["exposure"]: {**defaults, **r} for r in q }
 
 
-def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, **kwargs):
+def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **kwargs):
     """
     Return a generator of metadata for all exposures taken from a given observatory on a given MJD.
     """
 
     # We will often run `get_almanac_data` in parallel (through multiple processes),
     # so here we are avoiding opening a database connection until the child process starts.
-    from almanac.database import is_database_available#, catalogdb.SDSS_ID_flat, TwoMassPSC, catalogdb.CatalogToTwoMassPSC
+    from almanac.database import is_database_available, catalogdb
 
     exposures = list(get_exposure_metadata(observatory, mjd, **kwargs))
     
@@ -298,10 +301,64 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, **kw
         # make sure neither set contains None
         configids.discard(None)
         plateids.discard(None)
+        fiber_maps["fps"].update(get_fps_fiber_maps(observatory, configids))
+        fiber_maps["plates"].update(get_plate_fiber_maps(plateids))
+
+        if xmatch and is_database_available:
+            # Do a single database query and match [2mass/catalogid] -> sdss_id
+            # Match fps first.
+            catalogids = set()
+            sdss_id_lookup = {}
+            for _, rows in fiber_maps["fps"].items():
+                for target in rows:
+                    if target["catalogid"] >= 0:
+                        catalogids.add(target["catalogid"])            
+            
+            if catalogids:
+                q = (
+                    catalogdb.SDSS_ID_flat
+                    .select(
+                        catalogdb.SDSS_ID_flat.sdss_id,
+                        catalogdb.SDSS_ID_flat.catalogid
+                    )
+                    .where(
+                        catalogdb.SDSS_ID_flat.catalogid.in_(tuple(catalogids))
+                    &   (catalogdb.SDSS_ID_flat.rank == 1)
+                    )
+                    .tuples()
+                )
+                for sdss_id, catalogid in q:
+                    sdss_id_lookup[catalogid] = sdss_id
                 
-        fiber_maps["fps"].update(get_fps_fiber_maps(observatory, configids, **kwargs))
-        fiber_maps["plates"].update(get_plate_fiber_maps(plateids, **kwargs))
-    
+                for config_id, targets in fiber_maps["fps"].items():
+                    for target in targets:
+                        target["sdss_id"] = sdss_id_lookup.get(target["catalogid"], -1)    
+
+            # Now match any plate targets.
+            designations = set()
+            sdss_id_lookup = {}
+            for _, targets in fiber_maps["plates"].items():
+                for target in targets:
+                    designations.add(target_id_to_designation(target["target_id"]))
+
+            if designations:
+                q = (
+                    catalogdb.SDSS_ID_flat
+                    .select(
+                        catalogdb.SDSS_ID_flat.sdss_id,
+                        catalogdb.TwoMassPSC.designation
+                    )
+                    .join(catalogdb.CatalogToTwoMassPSC, on=(catalogdb.SDSS_ID_flat.catalogid == catalogdb.CatalogToTwoMassPSC.catalogid))
+                    .join(catalogdb.TwoMassPSC, on=(catalogdb.CatalogToTwoMassPSC.target_id == catalogdb.TwoMassPSC.pts_key))
+                    .where(catalogdb.TwoMassPSC.designation.in_(tuple(designations)))
+                    .tuples()                    
+                )        
+                for sdss_id, designation in q:
+                    sdss_id_lookup[designation] = sdss_id                    
+                for plate_id, targets in fiber_maps["plates"].items():
+                    for target in targets:                    
+                        target["sdss_id"] = sdss_id_lookup.get(target_id_to_designation(target["target_id"]), -1)
+            
     for fiber_type, mappings in fiber_maps.items():
         for refid, targets in mappings.items():
             fiber_maps[fiber_type][refid] = Table(rows=targets)
@@ -379,52 +436,23 @@ def get_unique_exposure_paths(paths):
     return unique_exposure_paths
 
     
-def get_fps_fiber_maps(observatory, config_ids, xmatch=True):
+def get_fps_fiber_maps(observatory, config_ids):
     fps_fiber_maps = {}
     if not config_ids:
         return fps_fiber_maps
     
-    # All FPS targets will have a catalogid, so we will xmatch to database with that (if we need)
     for config_id in config_ids:
         try:
             targets = get_fps_targets(observatory, config_id)
         except Exception as e:
             # Print an informative exception
-            print(f"\tCould not get FPS targets for config_id {config_id}: {e}")
-            targets = []
-
-        catalogids = set([target["catalogid"] for target in targets]).difference({-999, -1, ""})
-
-        if xmatch and len(catalogids) > 0 and is_database_available:
-            # cross-match to the SDSS database            
-            q = (
-                catalogdb.SDSS_ID_flat
-                .select(
-                    catalogdb.SDSS_ID_flat.sdss_id,
-                    catalogdb.SDSS_ID_flat.catalogid
-                )
-                .where(
-                    catalogdb.SDSS_ID_flat.catalogid.in_(tuple(catalogids))
-                &   (catalogdb.SDSS_ID_flat.rank == 1)
-                )
-                .tuples()
-            )
-            sdss_id_lookup = {}
-            for sdss_id, catalogid in q:
-                sdss_id_lookup[catalogid] = sdss_id
-            
-            for target in targets:
-                target["sdss_id"] = sdss_id_lookup.get(target["catalogid"], -1)
-        else:
-            for target in targets:
-                target["sdss_id"] = -1
-                          
+            logger.exception(f"\tCould not get FPS targets for config_id {config_id}: {e}")
+            targets = []                          
         fps_fiber_maps[config_id] = targets
     return fps_fiber_maps
 
 
-def get_plate_fiber_maps(plate_ids, xmatch=True):
-
+def get_plate_fiber_maps(plate_ids):
     plate_fiber_maps = {}
     if not plate_ids:
         return plate_fiber_maps
@@ -436,32 +464,7 @@ def get_plate_fiber_maps(plate_ids, xmatch=True):
             # Print a useful exception
             print(f"\tCould not get plate targets for plate_id {plate_id}: {e}")
             targets = []
-            
-        if xmatch and len(targets) > 0 and is_database_available:
-            # cross-match to the SDSS database            
-            designations = set(tuple(map(target_id_to_designation, (target["target_id"] for target in targets))))
-            
-            q = (
-                catalogdb.SDSS_ID_flat
-                .select(
-                    catalogdb.SDSS_ID_flat.sdss_id,
-                    catalogdb.TwoMassPSC.designation
-                )
-                .join(catalogdb.CatalogToTwoMassPSC, on=(catalogdb.SDSS_ID_flat.catalogid == catalogdb.CatalogToTwoMassPSC.catalogid))
-                .join(catalogdb.TwoMassPSC, on=(catalogdb.CatalogToTwoMassPSC.target_id == catalogdb.TwoMassPSC.pts_key))
-                .where(catalogdb.TwoMassPSC.designation.in_(tuple(designations)))
-                .tuples()                    
-            )
-            
-            sdss_id_lookup = {}
-            for sdss_id, designation in q:
-                sdss_id_lookup[designation] = sdss_id
-                        
-            for target in targets:                    
-                target["sdss_id"] = sdss_id_lookup.get(target_id_to_designation(target["target_id"]), -1)
-        else:
-            for target in targets:
-                target["sdss_id"] = -1                
+        
         plate_fiber_maps[plate_id] = targets
     
     return plate_fiber_maps
