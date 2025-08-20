@@ -20,7 +20,7 @@ import click
 @click.option('--no-x-match', is_flag=True, help="Do not cross-match targets with SDSS-V database")
 @click.option('--output', '-O', default=None, type=str, help="Output file")
 @click.option('--processes', '-p', default=None, type=int, help="Number of processes to use")
-@click.option('--exposure-columns', default="observatory,mjd,exposure,lampqrtz,lampthar,lampune,fieldid,plateid,cartid,configid,imagetyp,dithpix", help="Comma-separated list of exposure columns to show", show_default=True)
+@click.option('--exposure-columns', default="observatory,mjd,exposure,lampqrtz,lampthar,lampune,fieldid,plateid,cartid,configid,imagetyp,dithpix,path_exists", help="Comma-separated list of exposure columns to show", show_default=True)
 @click.option('--fps-columns', default="sdss_id,catalogid,program,category,firstcarton,ra,dec,fiberId", help="Comma-separated list of fiber positioner columns to show", show_default=True)
 @click.option('--plate-columns', default="sdss_id,target_id,target_ra,target_dec,target_type,source_type,fiber_id", help="Comma-separated list of plate columns to show", show_default=True)
 @click.pass_context

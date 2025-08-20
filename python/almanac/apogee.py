@@ -6,9 +6,9 @@ from subprocess import check_output
 from itertools import starmap
 from tqdm import tqdm
 from astropy.table import Table
+from typing import Optional, Tuple, Dict
 
 from almanac import utils # ensures the Yanny table reader/writer is registered
-from almanac.database import is_database_available, SDSS_ID_flat, TwoMassPSC, CatalogToTwoMassPSC
 
 SAS_BASE_DIR = os.environ.get("SAS_BASE_DIR", "/uufs/chpc.utah.edu/common/home/sdss/")
 PLATELIST_DIR = os.environ.get("PLATELIST_DIR", "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/")
@@ -82,6 +82,7 @@ def _get_meta(path, has_chips=(None, None, None), keys=RAW_HEADER_KEYS, head=20_
         exposure=int(exposure),
         prefix=prefix,
         chip=chip,
+        path_exists=os.path.exists(path),
     )
     for prefix, has_chip in zip("abc", has_chips):
         headers[f"readout_chip_{prefix}"] = has_chip
@@ -192,7 +193,8 @@ def sort_and_insert_missing_exposures(exposures, require_exposures_start_at_1=Tr
         colpitch="",
         dithpix="",
         tcammid="",
-        tlsdetb=""
+        tlsdetb="",
+        path_exists=False,
     )
     missing_row_template.update(kwargs)
 
@@ -213,12 +215,49 @@ def sort_and_insert_missing_exposures(exposures, require_exposures_start_at_1=Tr
                     **missing_row_template
                 )
             )        
-        corrected.append(exposure)
+        corrected.append({**missing_row_template, **exposure})
         last_exposure_id = exposure["exposure"]
     
     return corrected
-        
 
+def sjd_to_exposure_prefix(sjd: int):
+    return (sjd - 55_562) * 10_000
+
+def exposure_prefix_to_sjd(prefix: int):
+    return (prefix // 10_000) + 55_562
+
+
+def get_expected_exposure_metadata(observatory: str, mjd: int) -> Dict[int, Dict]:
+    """
+    Query the SDSS database to get the expected exposures for a given observatory and MJD.
+    This is useful for identifying missing exposures.
+    """
+
+    from almanac.database import opsdb
+    
+    for model in (opsdb.Exposure, opsdb.ExposureFlavor):
+        model._meta.schema = f"opsdb_{observatory}"
+
+    q = (
+        opsdb
+        .Exposure
+        .select(
+            opsdb.Exposure.exposure_no.alias("exposure"),
+            opsdb.Exposure.configuration.alias("configid"),
+            opsdb.ExposureFlavor.label.alias("exptype"),
+            opsdb.ExposureFlavor.label.alias("imagetyp"),
+            opsdb.Exposure.start_time.alias("date-obs"),
+            opsdb.Exposure.comment.alias("obscmt"),
+        )
+        .where(
+            (opsdb.Exposure.exposure_no > sjd_to_exposure_prefix(mjd))
+        &   (opsdb.Exposure.exposure_no < sjd_to_exposure_prefix(mjd + 1))
+        )
+        .join(opsdb.ExposureFlavor, on=(opsdb.ExposureFlavor.pk == opsdb.Exposure.exposure_flavor))
+        .dicts()
+    )
+    defaults = dict(observatory=observatory, mjd=mjd)
+    return { r["exposure"]: {**defaults, **r} for r in q }
 
 
 def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, **kwargs):
@@ -226,14 +265,27 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, **kw
     Return a generator of metadata for all exposures taken from a given observatory on a given MJD.
     """
 
-    exposures = sort_and_insert_missing_exposures(
-        get_exposure_metadata(observatory, mjd, **kwargs)
-    )
+    # We will often run `get_almanac_data` in parallel (through multiple processes),
+    # so here we are avoiding opening a database connection until the child process starts.
+    from almanac.database import is_database_available#, catalogdb.SDSS_ID_flat, TwoMassPSC, catalogdb.CatalogToTwoMassPSC
+
+    exposures = list(get_exposure_metadata(observatory, mjd, **kwargs))
+    
+    exposure_numbers = set([e["exposure"] for e in exposures])
+
+    # Query the database for what exposures we should have expected.
+    expected_exposures = get_expected_exposure_metadata(observatory, mjd)
+    for n in set(expected_exposures.keys()).difference(exposure_numbers):
+        # Merge them together, do not keep an `expected` exposure if it exists on disk.
+        exposures.append(expected_exposures[n])
+
+    exposures = sort_and_insert_missing_exposures(exposures)
+
     if len(exposures) == 0: 
         return None
 
     exposures = Table(rows=list(exposures))
-    
+
     sequence_indices = {
         "objects": get_object_sequence_indices(exposures),
         "arclamps": get_arclamp_sequence_indices(exposures)
@@ -256,8 +308,17 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=True, **kw
     return (exposures, sequence_indices, fiber_maps)
  
 
-def get_sequence_exposure_numbers(exposures, imagetyp, keys, require_contiguous=True):
-    exposures_ = exposures[exposures["imagetyp"] == imagetyp]
+def get_sequence_exposure_numbers(
+    exposures, 
+    imagetyp: str, 
+    keys: Tuple[str], 
+    require_contiguous: bool = True,
+    require_path_exists: bool = True,
+):
+    mask = exposures["imagetyp"] == imagetyp
+    if require_path_exists:
+        mask *= exposures["path_exists"]
+    exposures_ = exposures[mask]
 
     # if there are no exposures of type imagetyp, return an empty list
     # not returning early will cause the _group_by to fail
@@ -281,7 +342,7 @@ def get_sequence_exposure_numbers(exposures, imagetyp, keys, require_contiguous=
     return exposure_numbers
 
 def get_arclamp_sequence_indices(exposures, **kwargs):
-    sequence_exposure_numbers = get_sequence_exposure_numbers(exposures, imagetyp="ArcLamp", keys=("dithpix", ))
+    sequence_exposure_numbers = get_sequence_exposure_numbers(exposures, imagetyp="ArcLamp", keys=("dithpix", ), **kwargs)
     sequence_indices = np.searchsorted(exposures["exposure"], sequence_exposure_numbers)
     if sequence_indices.size > 0:
         sequence_indices += [0, 1] # to offset the end index
@@ -337,14 +398,14 @@ def get_fps_fiber_maps(observatory, config_ids, xmatch=True):
         if xmatch and len(catalogids) > 0 and is_database_available:
             # cross-match to the SDSS database            
             q = (
-                SDSS_ID_flat
+                catalogdb.SDSS_ID_flat
                 .select(
-                    SDSS_ID_flat.sdss_id,
-                    SDSS_ID_flat.catalogid
+                    catalogdb.SDSS_ID_flat.sdss_id,
+                    catalogdb.SDSS_ID_flat.catalogid
                 )
                 .where(
-                    SDSS_ID_flat.catalogid.in_(tuple(catalogids))
-                &   (SDSS_ID_flat.rank == 1)
+                    catalogdb.SDSS_ID_flat.catalogid.in_(tuple(catalogids))
+                &   (catalogdb.SDSS_ID_flat.rank == 1)
                 )
                 .tuples()
             )
@@ -381,14 +442,14 @@ def get_plate_fiber_maps(plate_ids, xmatch=True):
             designations = set(tuple(map(target_id_to_designation, (target["target_id"] for target in targets))))
             
             q = (
-                SDSS_ID_flat
+                catalogdb.SDSS_ID_flat
                 .select(
-                    SDSS_ID_flat.sdss_id,
-                    TwoMassPSC.designation
+                    catalogdb.SDSS_ID_flat.sdss_id,
+                    catalogdb.TwoMassPSC.designation
                 )
-                .join(CatalogToTwoMassPSC, on=(SDSS_ID_flat.catalogid == CatalogToTwoMassPSC.catalogid))
-                .join(TwoMassPSC, on=(CatalogToTwoMassPSC.target_id == TwoMassPSC.pts_key))
-                .where(TwoMassPSC.designation.in_(tuple(designations)))
+                .join(catalogdb.CatalogToTwoMassPSC, on=(catalogdb.SDSS_ID_flat.catalogid == catalogdb.CatalogToTwoMassPSC.catalogid))
+                .join(catalogdb.TwoMassPSC, on=(catalogdb.CatalogToTwoMassPSC.target_id == catalogdb.TwoMassPSC.pts_key))
+                .where(catalogdb.TwoMassPSC.designation.in_(tuple(designations)))
                 .tuples()                    
             )
             

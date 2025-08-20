@@ -125,7 +125,7 @@ def pretty_print_exposures(
             if in_sequence:
                 color_print(line, sequence_color)
             else:                     
-                if line.find("Missing") > -1:
+                if line.find("Missing") > -1 or not table["path_exists"][i]:
                     color_print(line, missing_color)
                 else:
                     print(line)
