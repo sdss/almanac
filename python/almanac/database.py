@@ -20,3 +20,4 @@ elif t > config.database_connect_time_warning:
     )
 
 from sdssdb.peewee.sdss5db.catalogdb import (SDSS_ID_flat, TwoMassPSC, CatalogToTwoMassPSC)
+

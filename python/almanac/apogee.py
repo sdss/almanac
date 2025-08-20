@@ -8,17 +8,7 @@ from tqdm import tqdm
 from astropy.table import Table
 
 from almanac import utils # ensures the Yanny table reader/writer is registered
-
-try:
-    from sdssdb.peewee.sdss5db.catalogdb import database
-    assert database.set_profile("operations")
-    from sdssdb.peewee.sdss5db.catalogdb import (SDSS_ID_flat, TwoMassPSC, CatalogToTwoMassPSC)
-except Exception as e:
-    print(f"Exception trying to connect to SDSS-5 database: {e}")
-    SDSS5_DATABASE_AVAILABLE = False
-else:
-    SDSS5_DATABASE_AVAILABLE = True
-
+from almanac.database import is_database_available, SDSS_ID_flat, TwoMassPSC, CatalogToTwoMassPSC
 
 SAS_BASE_DIR = os.environ.get("SAS_BASE_DIR", "/uufs/chpc.utah.edu/common/home/sdss/")
 PLATELIST_DIR = os.environ.get("PLATELIST_DIR", "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/")
@@ -344,7 +334,7 @@ def get_fps_fiber_maps(observatory, config_ids, xmatch=True):
 
         catalogids = set([target["catalogid"] for target in targets]).difference({-999, -1, ""})
 
-        if xmatch and len(catalogids) > 0 and SDSS5_DATABASE_AVAILABLE:
+        if xmatch and len(catalogids) > 0 and is_database_available:
             # cross-match to the SDSS database            
             q = (
                 SDSS_ID_flat
@@ -386,7 +376,7 @@ def get_plate_fiber_maps(plate_ids, xmatch=True):
             print(f"\tCould not get plate targets for plate_id {plate_id}: {e}")
             targets = []
             
-        if xmatch and len(targets) > 0 and SDSS5_DATABASE_AVAILABLE:
+        if xmatch and len(targets) > 0 and is_database_available:
             # cross-match to the SDSS database            
             designations = set(tuple(map(target_id_to_designation, (target["target_id"] for target in targets))))
             
