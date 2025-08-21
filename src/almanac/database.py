@@ -3,12 +3,13 @@ import sdssdb
 from sdssdb.peewee.sdss5db import database
 
 from time import time
-from almanac.config import logger, config, asdict
+from almanac.config import config, asdict
+from almanac.logger import logger
 
 # Create a temporary sdssdb profile based on almanac settings
 t = -time()
 sdssdb.config.update(almanac=asdict(config.sdssdb))
-is_database_available = database.set_profile("almanac")
+is_database_available = database.set_profile("almanac", reuse_if_open=True)
 t += time()
 
 if not is_database_available:

@@ -1,36 +1,9 @@
-import logging
-import colorlog
 import os
 import yaml
 import warnings
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field, is_dataclass, asdict
 from pathlib import Path
-
-
-handler = colorlog.StreamHandler()
-
-formatter = colorlog.ColoredFormatter(
-    '%(log_color)s%(asctime)s [%(levelname)s] %(message)s',
-    log_colors={
-'DEBUG': 'cyan',
-'INFO': 'white',
-'WARNING': 'yellow',
-'ERROR': 'red',
-'CRITICAL': 'bold_red',
-},
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-
-handler.setFormatter(formatter)
-
-print("TODO: set logger by config default verbosity")
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG) # Set desired logging level
-
-# Add the handler to the logger
-logger.addHandler(handler)
-
 
 @dataclass
 class DatabaseConfig:
@@ -51,7 +24,7 @@ class Config:
     database_connect_time_warning: int = 3 # seconds
 
     sdssdb_exposure_min_mjd: ObservatoryMJD = field(default_factory=ObservatoryMJD)
-    
+    logging_level: int = 20 # logging.INFO
 
 
 def get_config_path():
@@ -64,7 +37,7 @@ class ConfigManager:
     """A utility class to save and load dataclass configurations using YAML."""
 
     @staticmethod
-    def save(config: object, file_path: str | Path):
+    def save(config: object, file_path: str):
         """Saves a dataclass object to a YAML file."""
         if not is_dataclass(config):
             raise TypeError("Provided object is not a dataclass.")
@@ -75,7 +48,7 @@ class ConfigManager:
 
 
     @staticmethod
-    def load(cls, file_path: str | Path):
+    def load(cls, file_path: str):
         """Loads a dataclass object from a YAML file."""
         if not is_dataclass(cls):
             raise TypeError("Provided class is not a dataclass.")

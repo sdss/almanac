@@ -9,7 +9,8 @@ from astropy.table import Table
 from typing import Optional, Tuple, Dict
 
 from almanac import utils # ensures the Yanny table reader/writer is registered
-from almanac.config import config, logger
+from almanac.config import config
+from almanac.logger import logger
 
 SAS_BASE_DIR = os.environ.get("SAS_BASE_DIR", "/uufs/chpc.utah.edu/common/home/sdss/")
 PLATELIST_DIR = os.environ.get("PLATELIST_DIR", "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/")
@@ -137,7 +138,7 @@ def get_confSummary_path(observatory, config_id):
     path = f"{directory}/confSummaryFS-{config_id}.par"
     if not os.path.exists(path):
         path = f"{directory}/confSummary-{config_id}.par"
-    logging.debug("confSummary(FS) path: ", path)
+    logger.debug(f"confSummary(FS) path: {path}")
 
     return path
 
