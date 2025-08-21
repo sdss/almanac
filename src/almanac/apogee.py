@@ -239,6 +239,8 @@ def get_expected_exposure_metadata(observatory: str, mjd: int) -> Dict[int, Dict
     Query the SDSS database to get the expected exposures for a given observatory and MJD.
     This is useful for identifying missing exposures.
     """
+    if mjd < 55_562:
+        return dict()
 
     from almanac.database import opsdb
     
@@ -284,7 +286,11 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
     expected_exposures = get_expected_exposure_metadata(observatory, mjd)
     for n in set(expected_exposures.keys()).difference(exposure_numbers):
         # Merge them together, do not keep an `expected` exposure if it exists on disk.
-        exposures.append(expected_exposures[n])
+        missing = expected_exposures[n]
+        logger.critical(
+            f"Missing {missing['exptype']} exposure {n} (configid: {missing['configid']}) from {observatory} on MJD {mjd}!"
+        )
+        exposures.append(missing)
 
     exposures = sort_and_insert_missing_exposures(exposures)
 
@@ -338,6 +344,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
 
             # Now match any plate targets.
             if twomass_designations:
+                sdss_id_lookup = {}
                 q = (
                     catalogdb.SDSS_ID_flat
                     .select(
