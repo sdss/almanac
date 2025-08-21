@@ -66,11 +66,19 @@ def main(ctx, verbosity, mjd, mjd_start, mjd_end, date, date_start, date_end, ap
     iterable = product(observatories, mjds)    
     results = []
     if processes is not None:
+
+        def initializer():
+            from sdssdb.peewee.sdss5db import database
+            if hasattr(database, '_state'):
+                database._state.closed = True
+                database._state.conn = None
+            from almanac.database import database
+
         # Parallel
         import os
         import signal
         import concurrent.futures
-        with concurrent.futures.ProcessPoolExecutor(max_workers=processes) as pool:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=processes, initializer=initializer) as pool:
             futures = []
             for total, (observatory, mjd) in enumerate(iterable, start=1):
                 futures.append(pool.submit(apogee.get_almanac_data, observatory, mjd, fibers, not no_x_match))
