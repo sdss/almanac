@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Everything we've got"
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.8"
 license = { text = "BSD 3-Clause License" }
 keywords = ["astronomy", "software"]
 classifiers = [
@@ -63,7 +63,7 @@ dev = [
 docs = [
     "Sphinx>=3.0.0,<4.0.0",
     "sphinx_bootstrap_theme>=0.4.12",
-    "jinja2==3.0.0"
+    "jinja2>=3.0.0"
 ]
 
 [project.scripts]
@@ -74,9 +74,10 @@ zip-safe = false
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["sdss_almanac*"]
 
 [tool.setuptools.package-data]
-sdss_almanac = ["etc/*"]
+almanac = ["etc/*"]
 
 [tool.isort]
 line_length = 79

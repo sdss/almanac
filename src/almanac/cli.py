@@ -2,10 +2,6 @@
 
 import click
 
-#if ctx.invoked_subcommand is None:
-#        ctx.invoke(query, **ctx.params)
-
-
 @click.group(invoke_without_command=True)
 @click.option('-v', '--verbosity', count=True, help="Verbosity level")
 @click.option('--mjd', default=None, type=int, help="Modified Julian date to query. Use negative values to indicate relative to current MJD.")
