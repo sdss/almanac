@@ -39,11 +39,19 @@ class DatabaseConfig:
     port: int = 5432
     domain: str = "operations.sdss.*"
 
+@dataclass
+class ObservatoryMJD:
+    apo: int = 59_558
+    lco: int = 59_558
+
 
 @dataclass
 class Config:
     sdssdb: DatabaseConfig = field(default_factory=DatabaseConfig)
     database_connect_time_warning: int = 3 # seconds
+
+    sdssdb_exposure_min_mjd: ObservatoryMJD = field(default_factory=ObservatoryMJD)
+    
 
 
 def get_config_path():

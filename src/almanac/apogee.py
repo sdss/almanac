@@ -9,7 +9,7 @@ from astropy.table import Table
 from typing import Optional, Tuple, Dict
 
 from almanac import utils # ensures the Yanny table reader/writer is registered
-from almanac.config import logger
+from almanac.config import config, logger
 
 SAS_BASE_DIR = os.environ.get("SAS_BASE_DIR", "/uufs/chpc.utah.edu/common/home/sdss/")
 PLATELIST_DIR = os.environ.get("PLATELIST_DIR", "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/")
@@ -167,10 +167,11 @@ def get_exposure_metadata(observatory: str, mjd: int, **kwargs):
     yield from starmap(_get_meta, get_unique_exposure_paths(paths))
 
 
-def sort_and_insert_missing_exposures(exposures, require_exposures_start_at_1=True, **kwargs):
+def organize_exposures(exposures, expected_exposures=None, require_exposures_start_at_1=True, **kwargs):
     """
     Identify any missing exposures (based on non-contiguous exposure numbers) and fill them with missing image types.
     """
+    expected_exposures = expected_exposures or dict()
     missing_row_template = dict(
         #observatory=exposures["observatory"][0],
         #mjd=exposures["mjd"][0],
@@ -212,16 +213,36 @@ def sort_and_insert_missing_exposures(exposures, require_exposures_start_at_1=Tr
             last_exposure_id = exposure["exposure"]
             if require_exposures_start_at_1:
                 last_exposure_id = int(str(last_exposure_id)[:4] + "0001")
+ 
+        observatory, mjd = (exposure["observatory"], exposure["mjd"])
+        cutoff = getattr(config.sdssdb_exposure_min_mjd, observatory)
 
         for n in range(last_exposure_id + 1, exposure["exposure"]):
-            corrected.append(
-                dict(
-                    exposure=n, 
-                    observatory=exposure["observatory"],
-                    mjd=exposure["mjd"],
-                    **missing_row_template
+            is_expected = n in expected_exposures
+            if is_expected:
+                missing = {**missing_row_template, **expected_exposures[n]}
+            else:
+                missing = dict(
+                    exposure=n,
+                    observatory=observatory,
+                    mjd=mjd,
+                    **missing_row_template,
                 )
-            )        
+
+            corrected.append(missing)
+            if is_expected:
+                context = f"Exposure record exists in {observatory} operations database."
+            elif mjd < cutoff:
+                context = (
+                    f"No exposure record in {observatory} operations database because it is before MJD cutoff ({mjd} < {cutoff})."
+                )
+            else:
+                context = (
+                    f"No exposure record in {observatory} operations database, but it should ({mjd} > {cutoff})!"
+                )
+            logger.critical(
+                f"Missing exposure {n} from {observatory} on MJD {mjd} (exptype={missing['exptype']}; configid={missing['configid']})! {context}"
+            )
         corrected.append({**missing_row_template, **exposure})
         last_exposure_id = exposure["exposure"]
     
@@ -239,7 +260,8 @@ def get_expected_exposure_metadata(observatory: str, mjd: int) -> Dict[int, Dict
     Query the SDSS database to get the expected exposures for a given observatory and MJD.
     This is useful for identifying missing exposures.
     """
-    if mjd < 55_562:
+
+    if mjd < getattr(config.sdssdb_exposure_min_mjd, observatory):
         return dict()
 
     from almanac.database import opsdb
@@ -278,21 +300,12 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
     # so here we are avoiding opening a database connection until the child process starts.
     from almanac.database import is_database_available, catalogdb
 
-    exposures = list(get_exposure_metadata(observatory, mjd, **kwargs))
+    exposures_on_disk = list(get_exposure_metadata(observatory, mjd, **kwargs))
     
-    exposure_numbers = set([e["exposure"] for e in exposures])
-
     # Query the database for what exposures we should have expected.
     expected_exposures = get_expected_exposure_metadata(observatory, mjd)
-    for n in set(expected_exposures.keys()).difference(exposure_numbers):
-        # Merge them together, do not keep an `expected` exposure if it exists on disk.
-        missing = expected_exposures[n]
-        logger.critical(
-            f"Missing {missing['exptype']} exposure {n} (configid: {missing['configid']}) from {observatory} on MJD {mjd}!"
-        )
-        exposures.append(missing)
 
-    exposures = sort_and_insert_missing_exposures(exposures)
+    exposures = organize_exposures(exposures_on_disk, expected_exposures)
 
     if len(exposures) == 0: 
         return None
