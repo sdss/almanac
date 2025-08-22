@@ -5,12 +5,14 @@ from typing import List, Dict, Optional
 from dataclasses import dataclass, field, is_dataclass, asdict
 from pathlib import Path
 
+
 @dataclass
 class DatabaseConfig:
     user: str = "sdss_user"
     host: str = "operations.sdss.org"
     port: int = 5432
     domain: str = "operations.sdss.*"
+
 
 @dataclass
 class ObservatoryMJD:
@@ -21,10 +23,10 @@ class ObservatoryMJD:
 @dataclass
 class Config:
     sdssdb: DatabaseConfig = field(default_factory=DatabaseConfig)
-    database_connect_time_warning: int = 3 # seconds
+    database_connect_time_warning: int = 3  # seconds
 
     sdssdb_exposure_min_mjd: ObservatoryMJD = field(default_factory=ObservatoryMJD)
-    logging_level: int = 20 # logging.INFO
+    logging_level: int = 20  # logging.INFO
 
 
 def get_config_path():
@@ -45,7 +47,6 @@ class ConfigManager:
         data = asdict(config)
         with open(file_path, "w") as f:
             yaml.dump(data, f, sort_keys=False)
-
 
     @staticmethod
     def load(cls, file_path: str):
@@ -84,4 +85,3 @@ if not os.path.exists(config_path):
     ConfigManager.save(config, config_path)
 else:
     config = ConfigManager.load(Config, config_path)
-

@@ -8,13 +8,19 @@ from tqdm import tqdm
 from astropy.table import Table
 from typing import Optional, Tuple, Dict
 
-from almanac import utils # ensures the Yanny table reader/writer is registered
+from almanac import utils  # ensures the Yanny table reader/writer is registered
 from almanac.config import config
 from almanac.logger import logger
 
 SAS_BASE_DIR = os.environ.get("SAS_BASE_DIR", "/uufs/chpc.utah.edu/common/home/sdss/")
-PLATELIST_DIR = os.environ.get("PLATELIST_DIR", "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/")
-SDSSCORE_DIR = os.environ.get("SDSSCORE_DIR", "/uufs/chpc.utah.edu/common/home/sdss50/software/git/sdss/sdsscore/main/")
+PLATELIST_DIR = os.environ.get(
+    "PLATELIST_DIR",
+    "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/",
+)
+SDSSCORE_DIR = os.environ.get(
+    "SDSSCORE_DIR",
+    "/uufs/chpc.utah.edu/common/home/sdss50/software/git/sdss/sdsscore/main/",
+)
 
 YANNY_TARGET_MATCH = re.compile(
     r'STRUCT1 APOGEE_?\w* (?P<target_type>\w+) (?P<source_type>[\w-]+) (?P<target_ra>[\-\+\.\w\d+]+) (?P<target_dec>[\-\+\.\w\d+]+) \d+ \d+ \d+ (?P<fiber_id>\d+) .+ (?P<target_id>"?[\w\d\s\.\-\+]{1,29}"?) [\d ]?(?P<xfocal>[\-\+\.\w\d+]+) (?P<yfocal>[\-\+\.\w\d+]+)$'
@@ -46,14 +52,15 @@ RAW_HEADER_KEYS = (
     "TLSDETB",
 )
 
+
 def _parse_hexdump_headers(output, keys, default=""):
     meta = [default] * len(keys)
     for line in output:
         try:
             key, value = line.split("=", 2)
-        except ValueError: # grep'd something in the data
+        except ValueError:  # grep'd something in the data
             continue
-        
+
         key = key.strip()
         if key in keys:
             index = keys.index(key)
@@ -61,19 +68,19 @@ def _parse_hexdump_headers(output, keys, default=""):
                 # could be comment
                 *parts, comment = value.split("/")
                 value = "/".join(parts)
-            
+
             value = value.strip("' ")
             meta[index] = value.strip()
     return meta
-    
+
+
 def _get_meta(path, has_chips=(None, None, None), keys=RAW_HEADER_KEYS, head=20_000):
-    keys_str = "|".join(keys) 
-    commands = " | ".join([
-        'hexdump -n {head} -e \'80/1 "%_p" "\\n"\' {path}',
-        'egrep "{keys_str}"'
-    ]).format(head=head, path=path, keys_str=keys_str)
+    keys_str = "|".join(keys)
+    commands = " | ".join(
+        ['hexdump -n {head} -e \'80/1 "%_p" "\\n"\' {path}', 'egrep "{keys_str}"']
+    ).format(head=head, path=path, keys_str=keys_str)
     outputs = check_output(commands, shell=True, text=True)
-    outputs = outputs.strip().split("\n") 
+    outputs = outputs.strip().split("\n")
     values = _parse_hexdump_headers(outputs, keys)
     _, observatory, mjd, basename = path.rsplit("/", 3)
     prefix, chip, exposure = basename.split("-")
@@ -88,16 +95,19 @@ def _get_meta(path, has_chips=(None, None, None), keys=RAW_HEADER_KEYS, head=20_
     )
     for prefix, has_chip in zip("abc", has_chips):
         headers[f"readout_chip_{prefix}"] = has_chip
-    
+
     headers.update(dict(zip(map(str.lower, RAW_HEADER_KEYS), values)))
     if headers["cartid"].strip() == "FPS":
         headers["cartid"] = 0
     return headers
 
-def target_id_to_designation(target_id):    
+
+def target_id_to_designation(target_id):
     # The target_ids seem to be styled '2MASS-J...'
     target_id = target_id.strip()
-    return (target_id[5:] if target_id.startswith("2MASS") else target_id).lstrip("-Jdb_")
+    return (target_id[5:] if target_id.startswith("2MASS") else target_id).lstrip(
+        "-Jdb_"
+    )
 
 
 def get_plateHole_path(plate_id):
@@ -105,6 +115,7 @@ def get_plateHole_path(plate_id):
     path = f"{PLATELIST_DIR}/plates/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plateHoles-{plate_id:0>6.0f}.par"
     logger.debug(f"plateHole path: {path}")
     return path
+
 
 def get_plate_targets(plate_id):
     targets, count, designations = ([], 0, set())
@@ -115,12 +126,13 @@ def get_plate_targets(plate_id):
                 target["target_id"] = target["target_id"].strip(' "')
                 target["sdss_id"] = -1
                 designations.add(target_id_to_designation(target["target_id"]))
-                targets.append(target)  
+                targets.append(target)
                 count += 1
                 if count == 500:
                     break
-                                
+
     return (designations, targets)
+
 
 # get FPS plug info
 def get_confSummary_path(observatory, config_id):
@@ -142,40 +154,46 @@ def get_confSummary_path(observatory, config_id):
 
     return path
 
-    
+
 def get_fps_targets(config_id, observatory):
     """
     Return a list of dicts containing the target information for the given `observatory` and `config_id`.
 
-    :param config_id: 
+    :param config_id:
         The configuration ID.
 
-    :param observatory: 
+    :param observatory:
         The observatory name (e.g. "apo").
     """
-    t = Table.read(get_confSummary_path(observatory, config_id), format="yanny", tablename="FIBERMAP")
+    t = Table.read(
+        get_confSummary_path(observatory, config_id),
+        format="yanny",
+        tablename="FIBERMAP",
+    )
     t["sdss_id"] = -1
     mapping = [dict(zip(t.colnames, row)) for row in t]
     return (set(t["catalogid"]), mapping)
-    
+
 
 def get_exposure_metadata(observatory: str, mjd: int, **kwargs):
     """
     Return a generator of metadata for all exposures taken from a given observatory on a given MJD.
     """
-    
+
     paths = glob(f"{SAS_BASE_DIR}/sdsswork/data/apogee/{observatory}/{mjd}/a?R-*.apz")
     yield from starmap(_get_meta, get_unique_exposure_paths(paths))
 
 
-def organize_exposures(exposures, expected_exposures=None, require_exposures_start_at_1=True, **kwargs):
+def organize_exposures(
+    exposures, expected_exposures=None, require_exposures_start_at_1=True, **kwargs
+):
     """
     Identify any missing exposures (based on non-contiguous exposure numbers) and fill them with missing image types.
     """
     expected_exposures = expected_exposures or dict()
     missing_row_template = dict(
-        #observatory=exposures["observatory"][0],
-        #mjd=exposures["mjd"][0],
+        # observatory=exposures["observatory"][0],
+        # mjd=exposures["mjd"][0],
         prefix="apR",
         chip="",
         readout_chip_a=False,
@@ -206,17 +224,14 @@ def organize_exposures(exposures, expected_exposures=None, require_exposures_sta
         path_exists=False,
     )
     missing_row_template.update(kwargs)
-    
+
     def prepare_missing_exposure(n, observatory=None, mjd=None):
         is_expected = n in expected_exposures
         if is_expected:
             missing = {**missing_row_template, **expected_exposures.pop(n)}
         else:
             missing = dict(
-                exposure=n,
-                observatory=observatory,
-                mjd=mjd,
-                **missing_row_template
+                exposure=n, observatory=observatory, mjd=mjd, **missing_row_template
             )
 
         observatory = observatory or missing["observatory"]
@@ -235,7 +250,6 @@ def organize_exposures(exposures, expected_exposures=None, require_exposures_sta
 
         return missing
 
-
     corrected = []
     last_exposure_id = 0
     for i, exposure in enumerate(sorted(exposures, key=lambda x: x["exposure"])):
@@ -243,7 +257,7 @@ def organize_exposures(exposures, expected_exposures=None, require_exposures_sta
             last_exposure_id = exposure["exposure"]
             if require_exposures_start_at_1:
                 last_exposure_id = int(str(last_exposure_id)[:4] + "0001")
- 
+
         observatory, mjd = (exposure["observatory"], exposure["mjd"])
         cutoff = getattr(config.sdssdb_exposure_min_mjd, observatory)
 
@@ -264,6 +278,7 @@ def organize_exposures(exposures, expected_exposures=None, require_exposures_sta
 def sjd_to_exposure_prefix(sjd: int):
     return (sjd - 55_562) * 10_000
 
+
 def exposure_prefix_to_sjd(prefix: int):
     return (prefix // 10_000) + 55_562
 
@@ -278,14 +293,12 @@ def get_expected_exposure_metadata(observatory: str, mjd: int) -> Dict[int, Dict
         return dict()
 
     from almanac.database import opsdb
-    
+
     for model in (opsdb.Exposure, opsdb.ExposureFlavor):
         model._meta.schema = f"opsdb_{observatory}"
 
     q = (
-        opsdb
-        .Exposure
-        .select(
+        opsdb.Exposure.select(
             opsdb.Exposure.exposure_no.alias("exposure"),
             opsdb.Exposure.configuration.alias("configid"),
             opsdb.ExposureFlavor.label.alias("exptype"),
@@ -295,13 +308,16 @@ def get_expected_exposure_metadata(observatory: str, mjd: int) -> Dict[int, Dict
         )
         .where(
             (opsdb.Exposure.exposure_no > sjd_to_exposure_prefix(mjd))
-        &   (opsdb.Exposure.exposure_no < sjd_to_exposure_prefix(mjd + 1))
+            & (opsdb.Exposure.exposure_no < sjd_to_exposure_prefix(mjd + 1))
         )
-        .join(opsdb.ExposureFlavor, on=(opsdb.ExposureFlavor.pk == opsdb.Exposure.exposure_flavor))
+        .join(
+            opsdb.ExposureFlavor,
+            on=(opsdb.ExposureFlavor.pk == opsdb.Exposure.exposure_flavor),
+        )
         .dicts()
     )
     defaults = dict(observatory=observatory, mjd=mjd)
-    return { r["exposure"]: {**defaults, **r} for r in q }
+    return {r["exposure"]: {**defaults, **r} for r in q}
 
 
 def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **kwargs):
@@ -314,32 +330,38 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
     from almanac.database import is_database_available, catalogdb
 
     exposures_on_disk = list(get_exposure_metadata(observatory, mjd, **kwargs))
-    
+
     # Query the database for what exposures we should have expected.
     expected_exposures = get_expected_exposure_metadata(observatory, mjd)
 
     exposures = organize_exposures(exposures_on_disk, expected_exposures)
 
-    if len(exposures) == 0: 
+    if len(exposures) == 0:
         return None
 
     exposures = Table(rows=list(exposures))
 
     sequence_indices = {
         "objects": get_object_sequence_indices(exposures),
-        "arclamps": get_arclamp_sequence_indices(exposures)
+        "arclamps": get_arclamp_sequence_indices(exposures),
     }
-        
+
     fiber_maps = dict(fps={}, plates={})
     if fibers:
         configids = set(exposures["configid"]).difference({"", "-1", "-999"})
-        plateids = set(exposures["plateid"]).difference({"", "0", "-1"}) # plate ids often 0
+        plateids = set(exposures["plateid"]).difference(
+            {"", "0", "-1"}
+        )  # plate ids often 0
         # make sure neither set contains None
         configids.discard(None)
         plateids.discard(None)
 
-        catalogids, fps_fiber_maps = get_fiber_mappings(get_fps_targets, configids, observatory)
-        twomass_designations, plate_fiber_maps = get_fiber_mappings(get_plate_targets, plateids)
+        catalogids, fps_fiber_maps = get_fiber_mappings(
+            get_fps_targets, configids, observatory
+        )
+        twomass_designations, plate_fiber_maps = get_fiber_mappings(
+            get_plate_targets, plateids
+        )
 
         fiber_maps["fps"].update(fps_fiber_maps)
         fiber_maps["plates"].update(plate_fiber_maps)
@@ -348,56 +370,70 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
             # Do a single database query and match [2mass/catalogid] -> sdss_id
             # Match fps first.
             if catalogids:
-                sdss_id_lookup = {}            
+                sdss_id_lookup = {}
                 q = (
-                    catalogdb.SDSS_ID_flat
-                    .select(
-                        catalogdb.SDSS_ID_flat.sdss_id,
-                        catalogdb.SDSS_ID_flat.catalogid
+                    catalogdb.SDSS_ID_flat.select(
+                        catalogdb.SDSS_ID_flat.sdss_id, catalogdb.SDSS_ID_flat.catalogid
                     )
                     .where(
                         catalogdb.SDSS_ID_flat.catalogid.in_(tuple(catalogids))
-                    &   (catalogdb.SDSS_ID_flat.rank == 1)
+                        & (catalogdb.SDSS_ID_flat.rank == 1)
                     )
                     .tuples()
                 )
                 for sdss_id, catalogid in q:
                     sdss_id_lookup[catalogid] = sdss_id
-                
+
                 for config_id, targets in fiber_maps["fps"].items():
                     for target in targets:
-                        target["sdss_id"] = sdss_id_lookup.get(target["catalogid"], -1)    
+                        target["sdss_id"] = sdss_id_lookup.get(target["catalogid"], -1)
 
             # Now match any plate targets.
             if twomass_designations:
                 sdss_id_lookup = {}
                 q = (
-                    catalogdb.SDSS_ID_flat
-                    .select(
-                        catalogdb.SDSS_ID_flat.sdss_id,
-                        catalogdb.TwoMassPSC.designation
+                    catalogdb.SDSS_ID_flat.select(
+                        catalogdb.SDSS_ID_flat.sdss_id, catalogdb.TwoMassPSC.designation
                     )
-                    .join(catalogdb.CatalogToTwoMassPSC, on=(catalogdb.SDSS_ID_flat.catalogid == catalogdb.CatalogToTwoMassPSC.catalogid))
-                    .join(catalogdb.TwoMassPSC, on=(catalogdb.CatalogToTwoMassPSC.target_id == catalogdb.TwoMassPSC.pts_key))
-                    .where(catalogdb.TwoMassPSC.designation.in_(tuple(twomass_designations)))
-                    .tuples()                    
-                )        
+                    .join(
+                        catalogdb.CatalogToTwoMassPSC,
+                        on=(
+                            catalogdb.SDSS_ID_flat.catalogid
+                            == catalogdb.CatalogToTwoMassPSC.catalogid
+                        ),
+                    )
+                    .join(
+                        catalogdb.TwoMassPSC,
+                        on=(
+                            catalogdb.CatalogToTwoMassPSC.target_id
+                            == catalogdb.TwoMassPSC.pts_key
+                        ),
+                    )
+                    .where(
+                        catalogdb.TwoMassPSC.designation.in_(
+                            tuple(twomass_designations)
+                        )
+                    )
+                    .tuples()
+                )
                 for sdss_id, designation in q:
-                    sdss_id_lookup[designation] = sdss_id                    
+                    sdss_id_lookup[designation] = sdss_id
                 for plate_id, targets in fiber_maps["plates"].items():
-                    for target in targets:                    
-                        target["sdss_id"] = sdss_id_lookup.get(target_id_to_designation(target["target_id"]), -1)
-            
+                    for target in targets:
+                        target["sdss_id"] = sdss_id_lookup.get(
+                            target_id_to_designation(target["target_id"]), -1
+                        )
+
     for fiber_type, mappings in fiber_maps.items():
         for refid, targets in mappings.items():
             fiber_maps[fiber_type][refid] = Table(rows=targets)
     return (exposures, sequence_indices, fiber_maps)
- 
+
 
 def get_sequence_exposure_numbers(
-    exposures, 
-    imagetyp: str, 
-    keys: Tuple[str], 
+    exposures,
+    imagetyp: str,
+    keys: Tuple[str],
     require_contiguous: bool = True,
     require_path_exists: bool = True,
 ):
@@ -410,54 +446,63 @@ def get_sequence_exposure_numbers(
     # not returning early will cause the _group_by to fail
     if len(exposures_) == 0:
         return []
-    exposures_.sort(("exposure", ))
+    exposures_.sort(("exposure",))
     exposures_ = exposures_.group_by(keys)
-    
+
     exposure_numbers = []
-    for si,ei in zip(exposures_.groups.indices[:-1], exposures_.groups.indices[1:]):
-        if require_contiguous:                
-            sub_indices = np.hstack([
-                si,
-                si + (np.where(np.diff(exposures_["exposure"][si:ei]) > 1)[0] + 1),
-                ei,
-            ])
-            for sj, ej in zip(sub_indices[:-1], sub_indices[1:]):        
-                exposure_numbers.append(tuple(exposures_["exposure"][sj:ej][[0, -1]]))        
+    for si, ei in zip(exposures_.groups.indices[:-1], exposures_.groups.indices[1:]):
+        if require_contiguous:
+            sub_indices = np.hstack(
+                [
+                    si,
+                    si + (np.where(np.diff(exposures_["exposure"][si:ei]) > 1)[0] + 1),
+                    ei,
+                ]
+            )
+            for sj, ej in zip(sub_indices[:-1], sub_indices[1:]):
+                exposure_numbers.append(tuple(exposures_["exposure"][sj:ej][[0, -1]]))
         else:
-            exposure_numbers.append(tuple(exposures_["exposure"][si:ei][[0, -1]]))   
+            exposure_numbers.append(tuple(exposures_["exposure"][si:ei][[0, -1]]))
     return exposure_numbers
 
+
 def get_arclamp_sequence_indices(exposures, **kwargs):
-    sequence_exposure_numbers = get_sequence_exposure_numbers(exposures, imagetyp="ArcLamp", keys=("dithpix", ), **kwargs)
+    sequence_exposure_numbers = get_sequence_exposure_numbers(
+        exposures, imagetyp="ArcLamp", keys=("dithpix",), **kwargs
+    )
     sequence_indices = np.searchsorted(exposures["exposure"], sequence_exposure_numbers)
     if sequence_indices.size > 0:
-        sequence_indices += [0, 1] # to offset the end index
+        sequence_indices += [0, 1]  # to offset the end index
     return np.sort(sequence_indices, axis=0)
-    
 
 
 def get_object_sequence_indices(exposures, **kwargs):
-    sequence_exposure_numbers = get_sequence_exposure_numbers(exposures, imagetyp="Object", keys=("fieldid", "plateid", "configid", "imagetyp"), **kwargs)
+    sequence_exposure_numbers = get_sequence_exposure_numbers(
+        exposures,
+        imagetyp="Object",
+        keys=("fieldid", "plateid", "configid", "imagetyp"),
+        **kwargs,
+    )
     sequence_indices = np.searchsorted(exposures["exposure"], sequence_exposure_numbers)
     if sequence_indices.size > 0:
-        sequence_indices += [0, 1] # to offset the end index
+        sequence_indices += [0, 1]  # to offset the end index
     return np.sort(sequence_indices, axis=0)
-    
-    
+
+
 def get_unique_exposure_paths(paths):
-    
+
     chip_mapping = {}
     for path in paths:
         _, observatory, mjd, basename = path.rsplit("/", 3)
         prefix, chip, exposure_apz = basename.split("-")
-        
+
         key = (observatory, mjd, exposure_apz)
         chip_mapping.setdefault(key, [prefix, [False, False, False]])
         index = "abc".index(chip)
         chip_mapping[key][1][index] = True
-        
+
     unique_exposure_paths = []
-    for (observatory, mjd, exposure_apz), (prefix, chips) in chip_mapping.items():        
+    for (observatory, mjd, exposure_apz), (prefix, chips) in chip_mapping.items():
         chip = "abc"[chips.index(True)]
         path = f"{SAS_BASE_DIR}/sdsswork/data/apogee/{observatory}/{mjd}/{prefix}-{chip}-{exposure_apz}"
         unique_exposure_paths.append((path, chips))
@@ -472,4 +517,3 @@ def get_fiber_mappings(f, iterable, *args):
         mappings[item] = mapping
         all_ids.update(ids)
     return (all_ids, mappings)
-
