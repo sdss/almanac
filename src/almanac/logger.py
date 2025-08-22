@@ -19,5 +19,5 @@ formatter = colorlog.ColoredFormatter(
 handler.setFormatter(formatter)
 
 logger = logging.getLogger(__name__.split(".", 1)[0])
-logger.setLevel(config.logging_level)
+logger.setLevel(int(config.logging_level))
 logger.addHandler(handler)

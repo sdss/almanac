@@ -264,6 +264,7 @@ def organize_exposures(
         for n in range(last_exposure_id + 1, exposure["exposure"]):
             corrected.append(prepare_missing_exposure(n, observatory, mjd))
 
+        expected_exposures.pop(exposure["exposure"], None)         
         corrected.append({**missing_row_template, **exposure})
         last_exposure_id = exposure["exposure"]
 
@@ -329,12 +330,17 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
     # so here we are avoiding opening a database connection until the child process starts.
     from almanac.database import is_database_available, catalogdb
 
+    logger.debug(f"getting {observatory} for {mjd} with {fibers} {xmatch}")
     exposures_on_disk = list(get_exposure_metadata(observatory, mjd, **kwargs))
+    logger.debug(f"{observatory}/{mjd} has {len(exposures_on_disk)} exposures on disk")
+
 
     # Query the database for what exposures we should have expected.
     expected_exposures = get_expected_exposure_metadata(observatory, mjd)
+    logger.debug(f"{observatory}/{mjd} has {len(expected_exposures)} expected exposures")
 
     exposures = organize_exposures(exposures_on_disk, expected_exposures)
+    logger.debug(f"{observatory}/{mjd} joined: {len(exposures)}")
 
     if len(exposures) == 0:
         return None
@@ -355,13 +361,15 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
         # make sure neither set contains None
         configids.discard(None)
         plateids.discard(None)
-
+        logger.debug(f"{observatory}/{mjd} checking fibers")
         catalogids, fps_fiber_maps = get_fiber_mappings(
             get_fps_targets, configids, observatory
         )
+        logger.debug(f"{observatory}/{mjd} has {len(catalogids)} unique catalogids")
         twomass_designations, plate_fiber_maps = get_fiber_mappings(
             get_plate_targets, plateids
         )
+        logger.debug(f"{observatory}/{mjd} has {len(twomass_designations)} unique 2mass designations")
 
         fiber_maps["fps"].update(fps_fiber_maps)
         fiber_maps["plates"].update(plate_fiber_maps)
@@ -369,6 +377,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
         if xmatch and is_database_available:
             # Do a single database query and match [2mass/catalogid] -> sdss_id
             # Match fps first.
+            logger.debug(f"{observatory}/{mjd} doing catalogid/sdss id cross-match")
             if catalogids:
                 sdss_id_lookup = {}
                 q = (
@@ -387,6 +396,8 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
                 for config_id, targets in fiber_maps["fps"].items():
                     for target in targets:
                         target["sdss_id"] = sdss_id_lookup.get(target["catalogid"], -1)
+
+            logger.debug(f"{observatory}/{mjd} doing 2mass/sdss id cross-match")
 
             # Now match any plate targets.
             if twomass_designations:
