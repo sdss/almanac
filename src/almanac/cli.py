@@ -78,14 +78,12 @@ def main(
         command = dict(config=config)[ctx.invoked_subcommand]
         return ctx.invoke(command, **ctx.params)
 
-    from tqdm import tqdm
     from itertools import product
+    from rich.live import Live
+    from almanac.logger import logger
+    from almanac.display import ObservationsDisplay
     from almanac import apogee, io, utils
-
-    tqdm_kwds = dict(disable=(verbosity < 1))
-
-    if output is None and verbosity == 0:
-        verbosity = 2
+    from contextlib import nullcontext
 
     show_exposure_columns = exposure_columns.split(",")
     show_fps_columns = fps_columns.split(",")
@@ -105,50 +103,71 @@ def main(
                     if len(targets) > 0:
                         utils.pretty_print_targets(targets[columns], fiber_type, refid)
 
-    mjds = utils.parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end)
+    mjds, mjd_min, mjd_max = utils.parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end)
     observatories = utils.get_observatories(apo, lco)
 
-    iterable = product(observatories, mjds)
+    iterable = product(mjds, observatories)
     results = []
-    if processes is not None:
+    
+    display = ObservationsDisplay(mjd_min, mjd_max, observatories)
+    
+    buffered_critical_logs = []
 
-        def initializer():
-            from sdssdb.peewee.sdss5db import database
+    context_manager = (
+        Live(display.create_display(), refresh_per_second=2, screen=True)
+        if verbosity >= 1
+        else nullcontext()
+    )
 
-            if hasattr(database, "_state"):
-                database._state.closed = True
-                database._state.conn = None
-            from almanac.database import database
+    with context_manager as live:                
+        if processes is not None:
 
-        # Parallel
-        import os
-        import signal
-        import concurrent.futures
+            def initializer():
+                from sdssdb.peewee.sdss5db import database
 
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=processes, initializer=initializer
-        ) as pool:
-            futures = []
-            for total, (observatory, mjd) in enumerate(iterable, start=1):
-                futures.append(
-                    pool.submit(
-                        apogee.get_almanac_data,
-                        observatory,
-                        mjd,
-                        fibers,
-                        not no_x_match,
+                if hasattr(database, "_state"):
+                    database._state.closed = True
+                    database._state.conn = None
+                from almanac.database import database
+
+            # Parallel
+            import os
+            import signal
+            import concurrent.futures
+
+            with concurrent.futures.ProcessPoolExecutor(
+                max_workers=processes, initializer=initializer
+            ) as pool:
+                futures = []
+                for total, (mjd, observatory) in enumerate(iterable, start=1):
+                    futures.append(
+                        pool.submit(
+                            apogee.get_almanac_data,
+                            observatory,
+                            mjd,
+                            fibers,
+                            not no_x_match,
+                        )
                     )
-                )
 
-            with tqdm(desc="Collecting data", total=total, **tqdm_kwds) as pb:
                 try:
                     for future in concurrent.futures.as_completed(futures):
-                        pb.update()
-                        result = future.result()
-                        if result is None:
+                        o, m, missing, *result = future.result()
+                        v = m - mjd_min + display.offset
+                        if missing:
+                            display.missing.add(v)
+                            buffered_critical_logs.extend(missing)
+                        
+                        exposures, sequences, fiber_maps = result
+                        if exposures is None:
+                            display.no_data.add(v)
+                            if live is not None: live.update(display.create_display())                            
                             continue
 
-                        pretty_print_progress(*result)
+                        display.completed[o].add(v)
+                        if live is not None: live.update(display.create_display())
+
+                        #pretty_print_progress(*result)
                         results.append(result)
 
                 except KeyboardInterrupt:
@@ -157,16 +176,28 @@ def main(
                     pool.shutdown(wait=False, cancel_futures=True)
                     raise KeyboardInterrupt
 
-    else:
-        for observatory, mjd in tqdm(
-            iterable, total=len(mjds) * len(observatories), **tqdm_kwds
-        ):
-            result = apogee.get_almanac_data(observatory, mjd, fibers, not no_x_match)
-            if result is None:
-                continue
+        else:
+            for mjd, observatory in iterable:
+                o, m, missing, *result = apogee.get_almanac_data(observatory, mjd, fibers, not no_x_match)
+                v = m - mjd_min + display.offset
+                if missing:
+                    display.missing.add(v)
+                    buffered_critical_logs.extend(missing)
+                
+                exposures, sequences, fiber_maps = result
+                if exposures is None:
+                    display.no_data.add(v)
+                    if live is not None: live.update(display.create_display())
+                    continue
+                
+                display.completed[o].add(v)
+                if live is not None: live.update(display.create_display())
 
-            pretty_print_progress(*result)
-            results.append(result)
+                #pretty_print_progress(*result)
+                results.append(result)
+
+    for item in buffered_critical_logs:
+        logger.critical(item)
 
     if output:
         io.write_almanac(output, results, verbose=(verbosity >= 3))

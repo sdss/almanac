@@ -3,6 +3,7 @@ from time import time
 from datetime import datetime
 from itertools import cycle
 from astropy.table import Table
+from astropy.time import Time
 from astropy.utils.console import color_print
 from astropy.io.registry import register_identifier, register_reader, register_writer
 from pydl.pydlutils.yanny import is_yanny, read_table_yanny, write_table_yanny
@@ -32,6 +33,8 @@ def get_current_mjd():
 def datetime_to_mjd(date):
     return int(timestamp_to_mjd(datetime.strptime(date, "%Y-%m-%d").timestamp()))
 
+def mjd_to_datetime(mjd):
+    return Time(mjd, format='mjd').datetime
 
 def parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end, earliest_mjd=0):
     has_mjd_range = mjd_start is not None or mjd_end is not None
@@ -44,11 +47,11 @@ def parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end, earliest_mjd
             "Cannot specify more than one of --mjd, --mjd-start/--mjd-end, --date, --date-start/--date-end"
         )
     if n_given == 0:
-        return (current_mjd,)
+        return (current_mjd, current_mjd, current_mjd)
     if mjd is not None:
         if mjd < 0:
             mjd += current_mjd
-        return (mjd,)
+        return (mjd, mjd, mjd)
     if has_mjd_range:
         mjd_start = mjd_start or earliest_mjd
         if mjd_start < 0:
@@ -56,13 +59,14 @@ def parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end, earliest_mjd
         mjd_end = mjd_end or current_mjd
         if mjd_end < 0:
             mjd_end += current_mjd
-        return range(mjd_start, 1 + mjd_end)
+        return (range(mjd_start, 1 + mjd_end), mjd_start, mjd_end)
     if date is not None:
-        return (datetime_to_mjd(date),)
+        mjd = datetime_to_mjd(date)
+        return ((mjd, ), mjd, mjd)
     if has_date_range:
         mjd_start = earliest_mjd if date_start is None else datetime_to_mjd(date_start)
         mjd_end = current_mjd if date_end is None else datetime_to_mjd(date_end)
-        return range(mjd_start, 1 + mjd_end)
+        return (range(mjd_start, 1 + mjd_end), mjd_start, mjd_end)
 
     raise RuntimeError("Should not be able to get here")
 

@@ -244,13 +244,11 @@ def organize_exposures(
         else:
             context = f"No exposure record in {observatory} operations database, but it should ({mjd} > {cutoff})!"
 
-        logger.critical(
-            f"Missing exposure {n} from {observatory} on MJD {mjd} (exptype={missing['exptype']}; configid={missing['configid']})! {context}"
-        )
+        message = f"Missing exposure {n} from {observatory} on MJD {mjd} (exptype={missing['exptype']}; configid={missing['configid']})! {context}"
 
-        return missing
+        return missing, message
 
-    corrected = []
+    corrected, messages = ([], [])
     last_exposure_id = 0
     for i, exposure in enumerate(sorted(exposures, key=lambda x: x["exposure"])):
         if i == 0:
@@ -262,7 +260,9 @@ def organize_exposures(
         cutoff = getattr(config.sdssdb_exposure_min_mjd, observatory)
 
         for n in range(last_exposure_id + 1, exposure["exposure"]):
-            corrected.append(prepare_missing_exposure(n, observatory, mjd))
+            missing, message = prepare_missing_exposure(n, observatory, mjd)
+            corrected.append(missing)
+            messages.append(message)
 
         expected_exposures.pop(exposure["exposure"], None)         
         corrected.append({**missing_row_template, **exposure})
@@ -270,10 +270,12 @@ def organize_exposures(
 
     # If there are no `exposures`, but many `expected_exposures` then we find ourselves here.
     for n in sorted(expected_exposures.keys()):
-        corrected.append(prepare_missing_exposure(n))
+        missing, message = prepare_missing_exposure(n)
+        corrected.append(missing)
+        messages.append(message)
 
     # Ensure they really are sorted.
-    return sorted(corrected, key=lambda x: x["exposure"])
+    return (sorted(corrected, key=lambda x: x["exposure"]), messages)
 
 
 def sjd_to_exposure_prefix(sjd: int):
@@ -325,7 +327,6 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
     """
     Return a generator of metadata for all exposures taken from a given observatory on a given MJD.
     """
-
     # We will often run `get_almanac_data` in parallel (through multiple processes),
     # so here we are avoiding opening a database connection until the child process starts.
     from almanac.database import is_database_available, catalogdb
@@ -339,11 +340,11 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
     expected_exposures = get_expected_exposure_metadata(observatory, mjd)
     logger.debug(f"{observatory}/{mjd} has {len(expected_exposures)} expected exposures")
 
-    exposures = organize_exposures(exposures_on_disk, expected_exposures)
+    exposures, messages = organize_exposures(exposures_on_disk, expected_exposures)
     logger.debug(f"{observatory}/{mjd} joined: {len(exposures)}")
 
     if len(exposures) == 0:
-        return None
+        return (observatory, mjd, messages, None, None, None)
 
     exposures = Table(rows=list(exposures))
 
@@ -438,7 +439,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
     for fiber_type, mappings in fiber_maps.items():
         for refid, targets in mappings.items():
             fiber_maps[fiber_type][refid] = Table(rows=targets)
-    return (exposures, sequence_indices, fiber_maps)
+    return (observatory, mjd, messages, exposures, sequence_indices, fiber_maps)
 
 
 def get_sequence_exposure_numbers(
