@@ -206,6 +206,35 @@ def organize_exposures(exposures, expected_exposures=None, require_exposures_sta
         path_exists=False,
     )
     missing_row_template.update(kwargs)
+    
+    def prepare_missing_exposure(n, observatory=None, mjd=None):
+        is_expected = n in expected_exposures
+        if is_expected:
+            missing = {**missing_row_template, **expected_exposures.pop(n)}
+        else:
+            missing = dict(
+                exposure=n,
+                observatory=observatory,
+                mjd=mjd,
+                **missing_row_template
+            )
+
+        observatory = observatory or missing["observatory"]
+        mjd = mjd or missing["mjd"]
+
+        if is_expected:
+            context = f"Exposure record exists in {observatory} operations database."
+        elif mjd < cutoff:
+            context = f"No exposure record in {observatory} operations database because it is before MJD cutoff ({mjd} < {cutoff})."
+        else:
+            context = f"No exposure record in {observatory} operations database, but it should ({mjd} > {cutoff})!"
+
+        logger.critical(
+            f"Missing exposure {n} from {observatory} on MJD {mjd} (exptype={missing['exptype']}; configid={missing['configid']})! {context}"
+        )
+
+        return missing
+
 
     corrected = []
     last_exposure_id = 0
@@ -219,35 +248,18 @@ def organize_exposures(exposures, expected_exposures=None, require_exposures_sta
         cutoff = getattr(config.sdssdb_exposure_min_mjd, observatory)
 
         for n in range(last_exposure_id + 1, exposure["exposure"]):
-            is_expected = n in expected_exposures
-            if is_expected:
-                missing = {**missing_row_template, **expected_exposures[n]}
-            else:
-                missing = dict(
-                    exposure=n,
-                    observatory=observatory,
-                    mjd=mjd,
-                    **missing_row_template,
-                )
+            corrected.append(prepare_missing_exposure(n, observatory, mjd))
 
-            corrected.append(missing)
-            if is_expected:
-                context = f"Exposure record exists in {observatory} operations database."
-            elif mjd < cutoff:
-                context = (
-                    f"No exposure record in {observatory} operations database because it is before MJD cutoff ({mjd} < {cutoff})."
-                )
-            else:
-                context = (
-                    f"No exposure record in {observatory} operations database, but it should ({mjd} > {cutoff})!"
-                )
-            logger.critical(
-                f"Missing exposure {n} from {observatory} on MJD {mjd} (exptype={missing['exptype']}; configid={missing['configid']})! {context}"
-            )
         corrected.append({**missing_row_template, **exposure})
         last_exposure_id = exposure["exposure"]
-    
-    return corrected
+
+    # If there are no `exposures`, but many `expected_exposures` then we find ourselves here.
+    for n in sorted(expected_exposures.keys()):
+        corrected.append(prepare_missing_exposure(n))
+
+    # Ensure they really are sorted.
+    return sorted(corrected, key=lambda x: x["exposure"])
+
 
 def sjd_to_exposure_prefix(sjd: int):
     return (sjd - 55_562) * 10_000
@@ -461,4 +473,3 @@ def get_fiber_mappings(f, iterable, *args):
         all_ids.update(ids)
     return (all_ids, mappings)
 
-        
