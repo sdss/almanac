@@ -341,7 +341,7 @@ def organize_exposures(
                 last_exposure_id = int(str(last_exposure_id)[:4] + "0001")
 
         observatory, mjd = (exposure["observatory"], exposure["mjd"])
-        cutoff = getattr(config.sdssdb_exposure_min_mjd, observatory)
+        cutoff = int(getattr(config.sdssdb_exposure_min_mjd, observatory))
 
         for n in range(last_exposure_id + 1, exposure["exposure"]):
             missing, message = prepare_missing_exposure(n, observatory, mjd)
@@ -675,7 +675,6 @@ def get_unique_exposure_paths(paths: List[str]) -> List[Tuple[str, List[bool]]]:
 
     chip_mapping = {}
     for path in paths:
-        if "53490031" in path: continue
         _, observatory, mjd, basename = path.rsplit("/", 3)
         prefix, chip, exposure_apz = basename.split("-")
 
