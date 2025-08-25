@@ -112,5 +112,3 @@ almanac config get logging_level
 ```bash
 almanac config set logging_level 10
 ```
-`almanac` manages configuration settings through a YAML file stored at `~/.almanac/config.yaml`. It will create a file h
-
