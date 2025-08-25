@@ -13,7 +13,7 @@ from almanac.logger import logger
 
 YANNY_TARGET_MATCH = re.compile(
     r'STRUCT1 APOGEE_?\w* (?P<target_type>\w+) (?P<source_type>[\w-]+) (?P<target_ra>[\-\+\.\w\d+]+) (?P<target_dec>[\-\+\.\w\d+]+) \d+ '
-    r'\d+' \d+ (?P<fiber_id>\d+) .+ (?P<target_id>"?[\w\d\s\.\-\+]{1,29}"?) [\d ]?(?P<xfocal>[\-\+\.\w\d+]+) (?P<yfocal>[\-\+\.\w\d+]+)$'
+    r'\d+ \d+ (?P<fiber_id>\d+) .+ (?P<target_id>"?[\w\d\s\.\-\+]{1,29}"?) [\d ]?(?P<xfocal>[\-\+\.\w\d+]+) (?P<yfocal>[\-\+\.\w\d+]+)$'
 )
 
 RAW_HEADER_KEYS = (
@@ -675,6 +675,7 @@ def get_unique_exposure_paths(paths: List[str]) -> List[Tuple[str, List[bool]]]:
 
     chip_mapping = {}
     for path in paths:
+        if "53490031" in path: continue
         _, observatory, mjd, basename = path.rsplit("/", 3)
         prefix, chip, exposure_apz = basename.split("-")
 

@@ -1,11 +1,9 @@
-import logging
 import sdssdb
 from sdssdb.peewee.sdss5db import database
 
 from time import time
 from almanac.config import config, asdict
-
-logger = logging.getLogger(__name__.split(".", 1)[0])
+from almanac.logger import logger
 
 # Create a temporary sdssdb profile based on almanac settings
 t = -time()

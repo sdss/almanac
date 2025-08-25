@@ -4,12 +4,12 @@ import click
 
 
 @click.group(invoke_without_command=True)
-@click.option("-v", "--verbosity", count=True, help="Verbosity level")
+@click.option("-v", "--verbosity", count=True, help="Verbosity level. Use -v to show progress, or -vv to show progress and exposure table")
 @click.option(
     "--mjd",
     default=None,
     type=int,
-    help="Modified Julian date to query. Use negative values to indicate relative to current MJD.",
+    help="Modified Julian date to query. Use negative values to indicate relative to current MJD",
 )
 @click.option("--mjd-start", default=None, type=int, help="Start of MJD range to query")
 @click.option("--mjd-end", default=None, type=int, help="End of MJD range to query")
@@ -32,7 +32,7 @@ import click
 )
 @click.option(
     "--exposure-columns",
-    default="observatory,mjd,exposure,lampqrtz,lampthar,lampune,fieldid,plateid,cartid,configid,imagetyp,dithpix,path_exists",
+    default="observatory,mjd,exposure,exptype,nread,lampqrtz,lampthar,lampune,configid,designid,fieldid,cartid,dithpix",
     help="Comma-separated list of exposure columns to show",
     show_default=True,
 )
@@ -89,20 +89,6 @@ def main(
     show_fps_columns = fps_columns.split(",")
     show_plate_columns = plate_columns.split(",")
 
-    def pretty_print_progress(exposures, sequence_indices, fiber_maps):
-        if verbosity >= 2:
-            utils.pretty_print_exposures(
-                exposures[show_exposure_columns], sequence_indices
-            )
-        if verbosity >= 3:
-            for fiber_type, mapping in fiber_maps.items():
-                columns = (
-                    show_fps_columns if fiber_type == "fps" else show_plate_columns
-                )
-                for refid, targets in mapping.items():
-                    if len(targets) > 0:
-                        utils.pretty_print_targets(targets[columns], fiber_type, refid)
-
     mjds, mjd_min, mjd_max = utils.parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end)
     observatories = utils.get_observatories(apo, lco)
 
@@ -112,6 +98,7 @@ def main(
     display = ObservationsDisplay(mjd_min, mjd_max, observatories)
     
     buffered_critical_logs = []
+    buffered_result_rows = []
 
     context_manager = (
         Live(display.create_display(), refresh_per_second=2, screen=True)
@@ -166,8 +153,6 @@ def main(
 
                         display.completed[o].add(v)
                         if live is not None: live.update(display.create_display())
-
-                        #pretty_print_progress(*result)
                         results.append(result)
 
                 except KeyboardInterrupt:
@@ -192,10 +177,14 @@ def main(
                 
                 display.completed[o].add(v)
                 if live is not None: live.update(display.create_display())
-
-                #pretty_print_progress(*result)
                 results.append(result)
 
+    if verbosity >= 2:
+        from almanac.utils import rich_display_exposures
+        for e, s, *_ in results:
+            rich_display_exposures(e, s, column_names=show_exposure_columns)
+
+    # Show critical logs at the end to avoid disrupting the display
     for item in buffered_critical_logs:
         logger.critical(item)
 
