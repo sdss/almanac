@@ -1,7 +1,7 @@
 ## almanac
 `almanac` scrapes headers from raw APOGEE exposures and cross-matches those with the SDSS database to create a comprehensive summary of everything ever observed with an APOGEE instrument.
 
-![](https://github.com/sdss/almanac/blob/bde9a277c7b2f4582c36b90cb2a46b7b7de11f17/docs/almanac-example-1.gif)
+![](https://github.com/sdss/almanac/blob/83159e03632e3edbb45bb0c8de9810dec2dc49f1/docs/almanac-example-1.gif)
 
 ## Installation
 
