@@ -4,26 +4,16 @@ import numpy as np
 from glob import glob
 from subprocess import check_output
 from itertools import starmap
-from tqdm import tqdm
 from astropy.table import Table
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List, Set, Generator, Any, Union
 
 from almanac import utils  # ensures the Yanny table reader/writer is registered
 from almanac.config import config
 from almanac.logger import logger
 
-SAS_BASE_DIR = os.environ.get("SAS_BASE_DIR", "/uufs/chpc.utah.edu/common/home/sdss/")
-PLATELIST_DIR = os.environ.get(
-    "PLATELIST_DIR",
-    "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/",
-)
-SDSSCORE_DIR = os.environ.get(
-    "SDSSCORE_DIR",
-    "/uufs/chpc.utah.edu/common/home/sdss50/software/git/sdss/sdsscore/main/",
-)
-
 YANNY_TARGET_MATCH = re.compile(
-    r'STRUCT1 APOGEE_?\w* (?P<target_type>\w+) (?P<source_type>[\w-]+) (?P<target_ra>[\-\+\.\w\d+]+) (?P<target_dec>[\-\+\.\w\d+]+) \d+ \d+ \d+ (?P<fiber_id>\d+) .+ (?P<target_id>"?[\w\d\s\.\-\+]{1,29}"?) [\d ]?(?P<xfocal>[\-\+\.\w\d+]+) (?P<yfocal>[\-\+\.\w\d+]+)$'
+    r'STRUCT1 APOGEE_?\w* (?P<target_type>\w+) (?P<source_type>[\w-]+) (?P<target_ra>[\-\+\.\w\d+]+) (?P<target_dec>[\-\+\.\w\d+]+) \d+ '
+    r'\d+' \d+ (?P<fiber_id>\d+) .+ (?P<target_id>"?[\w\d\s\.\-\+]{1,29}"?) [\d ]?(?P<xfocal>[\-\+\.\w\d+]+) (?P<yfocal>[\-\+\.\w\d+]+)$'
 )
 
 RAW_HEADER_KEYS = (
@@ -53,7 +43,20 @@ RAW_HEADER_KEYS = (
 )
 
 
-def _parse_hexdump_headers(output, keys, default=""):
+def _parse_hexdump_headers(output: List[str], keys: Tuple[str, ...], default: str = "") -> List[str]:
+    """
+    Parse hexdump output to extract header key-value pairs.
+    
+    :param output:
+        List of strings from hexdump output containing header information.
+    :param keys:
+        Tuple of header keys to look for in the output.
+    :param default:
+        Default value to use when a key is not found.
+    
+    :returns:
+        List of header values corresponding to the input keys, with defaults for missing keys.
+    """
     meta = [default] * len(keys)
     for line in output:
         try:
@@ -74,7 +77,23 @@ def _parse_hexdump_headers(output, keys, default=""):
     return meta
 
 
-def _get_meta(path, has_chips=(None, None, None), keys=RAW_HEADER_KEYS, head=20_000):
+def _get_meta(path: str, has_chips: Tuple[Optional[bool], Optional[bool], Optional[bool]] = (None, None, None), 
+             keys: Tuple[str, ...] = RAW_HEADER_KEYS, head: int = 20_000) -> Dict[str, Any]:
+    """
+    Extract metadata from APOGEE raw data files using hexdump.
+    
+    :param path:
+        Full path to the APOGEE data file.
+    :param has_chips:
+        Tuple indicating which chips (a, b, c) are present in the data.
+    :param keys:
+        Tuple of header keys to extract from the file.
+    :param head:
+        Number of bytes to read from the beginning of the file.
+    
+    :returns:
+        Dictionary containing extracted metadata including observatory, MJD, exposure info, and header values.
+    """
     keys_str = "|".join(keys)
     commands = " | ".join(
         ['hexdump -n {head} -e \'80/1 "%_p" "\\n"\' {path}', 'egrep "{keys_str}"']
@@ -102,7 +121,16 @@ def _get_meta(path, has_chips=(None, None, None), keys=RAW_HEADER_KEYS, head=20_
     return headers
 
 
-def target_id_to_designation(target_id):
+def target_id_to_designation(target_id: str) -> str:
+    """
+    Convert a target ID to a standardized designation format.
+    
+    :param target_id:
+        The target ID string, typically in format like '2MASS-J...' or similar.
+    
+    :returns:
+        Cleaned designation string with prefixes removed.
+    """
     # The target_ids seem to be styled '2MASS-J...'
     target_id = target_id.strip()
     return (target_id[5:] if target_id.startswith("2MASS") else target_id).lstrip(
@@ -110,14 +138,33 @@ def target_id_to_designation(target_id):
     )
 
 
-def get_plateHole_path(plate_id):
+def get_plateHole_path(plate_id: int) -> str:
+    """
+    Get the path to the plateHole file for a given plate ID.
+
+    :param plate_id:
+        The plate ID.
+    
+    :returns:
+        The path to the plateHole file.
+    """
     plate_id = int(plate_id)
-    path = f"{PLATELIST_DIR}/plates/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plateHoles-{plate_id:0>6.0f}.par"
+    path = f"{config.platelist_dir}/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plateHoles-{plate_id:0>6.0f}.par"
     logger.debug(f"plateHole path: {path}")
     return path
 
 
-def get_plate_targets(plate_id):
+def get_plate_targets(plate_id: int) -> Tuple[Set[str], List[Dict[str, Any]]]:
+    """
+    Return a set of 2MASS designations and a list of dicts containing the target information
+    for the given `plate_id`.
+
+    :param plate_id:
+        The plate ID.
+    
+    :returns:
+        A tuple containing a set of 2MASS designations and a list of target dicts.
+    """
     targets, count, designations = ([], 0, set())
     with open(get_plateHole_path(plate_id), "r") as fp:
         for line in fp:
@@ -134,8 +181,19 @@ def get_plate_targets(plate_id):
     return (designations, targets)
 
 
-# get FPS plug info
-def get_confSummary_path(observatory, config_id):
+def get_confSummary_path(observatory: str, config_id: int) -> str:
+    """
+    Get the path to the confSummary(FS) file for a given observatory and configuration ID.
+
+    :param observatory:
+        The observatory name (e.g. "apo").
+    
+    :param config_id:
+        The configuration ID.
+    
+    :returns:
+        The path to the confSummary(FS) file.
+    """
     # we want the confSummaryFS file. The F means that is has the actual robot positions measured
     # measured by the field view camera. The S means that that it has Jose's estimate of whether
     # unassigned APOGEE fibers can be used as sky.
@@ -144,7 +202,7 @@ def get_confSummary_path(observatory, config_id):
     # the final file name does not used the padded config_id
     # For example config_id 1838 is in summary_files/001XXX/0018XX/confSummaryFS-1838.par
     c = str(config_id)
-    directory = f"{SDSSCORE_DIR}/{observatory}/summary_files/{c[:-3].zfill(3)}XXX/{c[:-2].zfill(4)}XX/"
+    directory = f"{config.sdsscore_dir}/{observatory}/summary_files/{c[:-3].zfill(3)}XXX/{c[:-2].zfill(4)}XX/"
 
     # fall back to confSummary if confSummaryFS does not exist
     path = f"{directory}/confSummaryFS-{config_id}.par"
@@ -155,7 +213,7 @@ def get_confSummary_path(observatory, config_id):
     return path
 
 
-def get_fps_targets(config_id, observatory):
+def get_fps_targets(config_id: int, observatory: str) -> Tuple[Set[int], List[Dict[str, Any]]]:
     """
     Return a list of dicts containing the target information for the given `observatory` and `config_id`.
 
@@ -164,6 +222,9 @@ def get_fps_targets(config_id, observatory):
 
     :param observatory:
         The observatory name (e.g. "apo").
+        
+    :returns:
+        A tuple containing a set of catalog IDs and a list of target mapping dictionaries.
     """
     t = Table.read(
         get_confSummary_path(observatory, config_id),
@@ -175,25 +236,48 @@ def get_fps_targets(config_id, observatory):
     return (set(t["catalogid"]), mapping)
 
 
-def get_exposure_metadata(observatory: str, mjd: int, **kwargs):
+def get_exposure_metadata(observatory: str, mjd: int, **kwargs) -> Generator[Dict[str, Any], None, None]:
     """
     Return a generator of metadata for all exposures taken from a given observatory on a given MJD.
+    
+    :param observatory:
+        The observatory name (e.g. "apo").
+    :param mjd:
+        The Modified Julian Date.
+    :param kwargs:
+        Additional keyword arguments passed to _get_meta function.
+        
+    :yields:
+        Dictionary containing exposure metadata for each exposure found.
     """
 
-    paths = glob(f"{SAS_BASE_DIR}/sdsswork/data/apogee/{observatory}/{mjd}/a?R-*.apz")
+    paths = glob(f"{config.apogee_dir}/{observatory}/{mjd}/a?R-*.apz")
     yield from starmap(_get_meta, get_unique_exposure_paths(paths))
 
 
 def organize_exposures(
-    exposures, expected_exposures=None, require_exposures_start_at_1=True, **kwargs
-):
+    exposures: List[Dict[str, Any]], 
+    expected_exposures: Optional[Dict[int, Dict[str, Any]]] = None, 
+    require_exposures_start_at_1: bool = True, 
+    **kwargs
+) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
     Identify any missing exposures (based on non-contiguous exposure numbers) and fill them with missing image types.
+    
+    :param exposures:
+        List of exposure dictionaries containing metadata.
+    :param expected_exposures:
+        Dictionary mapping exposure numbers to expected exposure metadata.
+    :param require_exposures_start_at_1:
+        Whether to require exposure numbering to start at 1.
+    :param kwargs:
+        Additional keyword arguments to include in missing exposure template.
+        
+    :returns:
+        Tuple containing the organized list of exposures and list of warning messages.
     """
     expected_exposures = expected_exposures or dict()
     missing_row_template = dict(
-        # observatory=exposures["observatory"][0],
-        # mjd=exposures["mjd"][0],
         prefix="apR",
         chip="",
         readout_chip_a=False,
@@ -278,11 +362,29 @@ def organize_exposures(
     return (sorted(corrected, key=lambda x: x["exposure"]), messages)
 
 
-def sjd_to_exposure_prefix(sjd: int):
-    return (sjd - 55_562) * 10_000
+def mjd_to_exposure_prefix(mjd: int) -> int:
+    """
+    Convert Modified Julian Date to exposure prefix.
+    
+    :param mjd:
+        Modified Julian Date.
+        
+    :returns:
+        Exposure prefix number.
+    """
+    return (mjd - 55_562) * 10_000
 
 
-def exposure_prefix_to_sjd(prefix: int):
+def exposure_prefix_to_mjd(prefix: int) -> int:
+    """
+    Convert exposure prefix back to Modified Julian Date.
+    
+    :param prefix:
+        Exposure prefix number.
+        
+    :returns:
+        Modified Julian Date.
+    """
     return (prefix // 10_000) + 55_562
 
 
@@ -310,8 +412,8 @@ def get_expected_exposure_metadata(observatory: str, mjd: int) -> Dict[int, Dict
             opsdb.Exposure.comment.alias("obscmt"),
         )
         .where(
-            (opsdb.Exposure.exposure_no > sjd_to_exposure_prefix(mjd))
-            & (opsdb.Exposure.exposure_no < sjd_to_exposure_prefix(mjd + 1))
+            (opsdb.Exposure.exposure_no > mjd_to_exposure_prefix(mjd))
+            & (opsdb.Exposure.exposure_no < mjd_to_exposure_prefix(mjd + 1))
         )
         .join(
             opsdb.ExposureFlavor,
@@ -323,9 +425,29 @@ def get_expected_exposure_metadata(observatory: str, mjd: int) -> Dict[int, Dict
     return {r["exposure"]: {**defaults, **r} for r in q}
 
 
-def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **kwargs):
+def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, xmatch: bool = False, **kwargs) -> Tuple[str, int, List[str], Optional[Table], Optional[Dict[str, Any]], Optional[Dict[str, Dict[Union[int, str], Table]]]]:
     """
-    Return a generator of metadata for all exposures taken from a given observatory on a given MJD.
+    Return comprehensive almanac data for all exposures taken from a given observatory on a given MJD.
+    
+    :param observatory:
+        The observatory name (e.g. "apo").
+    :param mjd:
+        The Modified Julian Date.
+    :param fibers:
+        Whether to include fiber mapping information.
+    :param xmatch:
+        Whether to perform cross-matching with catalog database.
+    :param kwargs:
+        Additional keyword arguments passed to other functions.
+        
+    :returns:
+        Tuple containing:
+        - observatory name
+        - MJD
+        - list of warning/info messages
+        - Table of exposure data
+        - dictionary of sequence indices
+        - dictionary of fiber mappings
     """
     # We will often run `get_almanac_data` in parallel (through multiple processes),
     # so here we are avoiding opening a database connection until the child process starts.
@@ -443,12 +565,29 @@ def get_almanac_data(observatory: str, mjd: int, fibers=False, xmatch=False, **k
 
 
 def get_sequence_exposure_numbers(
-    exposures,
+    exposures: Table,
     imagetyp: str,
-    keys: Tuple[str],
+    keys: Tuple[str, ...],
     require_contiguous: bool = True,
     require_path_exists: bool = True,
-):
+) -> List[Tuple[int, int]]:
+    """
+    Get exposure number ranges for sequences of a specific image type.
+    
+    :param exposures:
+        Astropy Table containing exposure metadata.
+    :param imagetyp:
+        The image type to search for (e.g., "Object", "ArcLamp").
+    :param keys:
+        Tuple of column names to group exposures by.
+    :param require_contiguous:
+        Whether to require exposure numbers to be contiguous within groups.
+    :param require_path_exists:
+        Whether to require that the file path exists on disk.
+        
+    :returns:
+        List of tuples containing (start_exposure, end_exposure) for each sequence.
+    """
     mask = exposures["imagetyp"] == imagetyp
     if require_path_exists:
         mask *= exposures["path_exists"]
@@ -478,7 +617,18 @@ def get_sequence_exposure_numbers(
     return exposure_numbers
 
 
-def get_arclamp_sequence_indices(exposures, **kwargs):
+def get_arclamp_sequence_indices(exposures: Table, **kwargs) -> np.ndarray:
+    """
+    Get array indices for ArcLamp exposure sequences.
+    
+    :param exposures:
+        Astropy Table containing exposure metadata.
+    :param kwargs:
+        Additional keyword arguments passed to get_sequence_exposure_numbers.
+        
+    :returns:
+        Numpy array of sequence indices for ArcLamp exposures.
+    """
     sequence_exposure_numbers = get_sequence_exposure_numbers(
         exposures, imagetyp="ArcLamp", keys=("dithpix",), **kwargs
     )
@@ -488,7 +638,18 @@ def get_arclamp_sequence_indices(exposures, **kwargs):
     return np.sort(sequence_indices, axis=0)
 
 
-def get_object_sequence_indices(exposures, **kwargs):
+def get_object_sequence_indices(exposures: Table, **kwargs) -> np.ndarray:
+    """
+    Get array indices for Object exposure sequences.
+    
+    :param exposures:
+        Astropy Table containing exposure metadata.
+    :param kwargs:
+        Additional keyword arguments passed to get_sequence_exposure_numbers.
+        
+    :returns:
+        Numpy array of sequence indices for Object exposures.
+    """
     sequence_exposure_numbers = get_sequence_exposure_numbers(
         exposures,
         imagetyp="Object",
@@ -501,7 +662,16 @@ def get_object_sequence_indices(exposures, **kwargs):
     return np.sort(sequence_indices, axis=0)
 
 
-def get_unique_exposure_paths(paths):
+def get_unique_exposure_paths(paths: List[str]) -> List[Tuple[str, List[bool]]]:
+    """
+    Process a list of file paths to find unique exposures and determine which chips are available.
+    
+    :param paths:
+        List of file paths to APOGEE exposure files.
+        
+    :returns:
+        List of tuples containing (path_to_exposure, list_of_chip_availability).
+    """
 
     chip_mapping = {}
     for path in paths:
@@ -516,13 +686,26 @@ def get_unique_exposure_paths(paths):
     unique_exposure_paths = []
     for (observatory, mjd, exposure_apz), (prefix, chips) in chip_mapping.items():
         chip = "abc"[chips.index(True)]
-        path = f"{SAS_BASE_DIR}/sdsswork/data/apogee/{observatory}/{mjd}/{prefix}-{chip}-{exposure_apz}"
+        path = f"{config.apogee_dir}/{observatory}/{mjd}/{prefix}-{chip}-{exposure_apz}"
         unique_exposure_paths.append((path, chips))
 
     return unique_exposure_paths
 
 
-def get_fiber_mappings(f, iterable, *args):
+def get_fiber_mappings(f: callable, iterable: Union[List[int], List[str]], *args) -> Tuple[Set[Union[int, str]], Dict[Union[int, str], List[Dict[str, Any]]]]:
+    """
+    Apply a function to get fiber mappings for multiple items and collect all unique IDs.
+    
+    :param f:
+        Function to call for each item (e.g., get_fps_targets, get_plate_targets).
+    :param iterable:
+        Collection of items to process (config IDs, plate IDs, etc.).
+    :param args:
+        Additional arguments to pass to the function.
+        
+    :returns:
+        Tuple containing a set of all unique IDs and a dictionary mapping items to their targets.
+    """
     all_ids, mappings = (set(), {})
     for item in iterable:
         ids, mapping = f(item, *args)

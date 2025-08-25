@@ -28,6 +28,11 @@ class Config:
     sdssdb_exposure_min_mjd: ObservatoryMJD = field(default_factory=ObservatoryMJD)
     logging_level: int = 20  # logging.INFO
 
+    # Paths
+    platelist_dir: str = "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/plates/"
+    sdsscore_dir: str = "/uufs/chpc.utah.edu/common/home/sdss50/software/git/sdss/sdsscore/main/"
+    apogee_dir: str = "/uufs/chpc.utah.edu/common/home/sdss/sdsswork/data/apogee/"
+
 
 def get_config_path():
     config_dir = Path.home() / ".almanac"
