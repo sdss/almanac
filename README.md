@@ -7,7 +7,9 @@ Everything we've got.
 
 # Installation
 
-`almanac` needs local disk access to the raw SDSS data frames. 
+`almanac` needs local disk access to raw APOGEE data frames. 
+
+### At Utah
 
 If you want to use this at Utah, you can install it with:
 
@@ -16,7 +18,14 @@ module load almanac
 ```
 
 > [!TIP]
-> If you don't already have a Python environment set up at Utah that uses `sdssdb`, then you may want to run `module load miniconda` as well so that you have all the requisite dependencies.
+> We recommend you manage your own Python environment, but if you don't have one set up at Utah then you can use `module load miniconda/3.8.5_astra`. 
+
+### Anywhere else
+
+We recommend using `uv` to manage Python environments. Using `uv`, you can install `almanac` with:
+```bash
+uv pip install git+https://github.com/sdss/almanac
+```
 
 # Usage
 
@@ -61,15 +70,15 @@ almanac --mjd 60000 --fibres
 
 The fiber mapping tables are cross-matched to the SDSS database to include the SDSS identifiers for each target. If you don't want to do this cross-match, you can use the ``--no-x-match`` flag. The ``--no-x-match`` flag is ignored if ``--fibers`` is not used.
 
-
-## Output behaviour
+## Verbosity
 
 By default there is minimal output to the terminal. You can adjust the verbosity level using `-v`:
-- `-v`: show progress bar only
-- `-vv`: show progress bar and exposure metadata
-- `-vvv`: show progress bar, exposure metadata, and fiber mapping metadata
+- `-v`: show progress display only
+- `-vv`: show progress display and exposure metadata
 
-You can also write the outputs to a structured HDF5 file by specifying an output path with the ``--output`` (or ``-O``) flag. If the output path already exists, the default behaviour is to overwrite existing entries *only*. So if you run `almanac` once for MJD 60000 and output to a file, and then run it again for MJD 60001 and output to the same file, your file will have data for both MJDs. 
+## Outputs
+
+You can write the outputs to a structured HDF5 file by specifying an output path with the ``--output`` (or ``-O``) flag. If the output path already exists, the default behaviour is to overwrite existing entries *only*. So if you run `almanac` once for MJD 60000 and output to a file, and then run it again for MJD 60001 and output to the same file, your file will have data for both MJDs. 
 
 ```bash
 almanac --output /path/to/file.h5 # Append today's data to existing file
@@ -83,3 +92,23 @@ An example structure of the HDF5 file is below:
     apo/59300/fibers/fps/1      # a data table of fiber mappings for FPS configuration id 1
     apo/59300/fibers/plates/2   # a data table of fiber mappings for plate id 2
 ```
+
+# Configuration
+
+You can view and change the `almanac` configuration settings through the `almanac config` interface. To view all current settings and to see the configuration file path:
+
+```bash
+almanac config show
+```
+
+## To get a single configuration value
+```bash
+almanac get logging_level
+```
+
+## To set a configuration value
+```bash
+almanac set logging_level 10
+```
+`almanac` manages configuration settings through a YAML file stored at `~/.almanac/config.yaml`. It will create a file h
+
