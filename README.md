@@ -105,12 +105,12 @@ almanac config show
 
 ### To get a single configuration value
 ```bash
-almanac get logging_level
+almanac config get logging_level
 ```
 
 ### To set a configuration value
 ```bash
-almanac set logging_level 10
+almanac config set logging_level 10
 ```
 `almanac` manages configuration settings through a YAML file stored at `~/.almanac/config.yaml`. It will create a file h
 
