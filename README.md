@@ -76,7 +76,7 @@ By default there is minimal output to the terminal. You can adjust the verbosity
 
 In verbose mode you can see exposure information in the terminal, and additional per-fiber metadata is stored in the HDF5 files that `almanac` creates.
 
-![](https://github.com/sdss/almanac/blob/a1184f97f5aa27244702baf6e7fd4d3e8a0ec914/docs/almanac-example-2.gif)
+![](https://github.com/sdss/almanac/blob/e3f46c8ce66b88843de943ca31eec88d12be8f06/docs/almanac-example-2.gif)
 
 ### Outputs
 
