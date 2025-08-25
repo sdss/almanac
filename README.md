@@ -25,7 +25,7 @@ Write out all fiber observations during 2021, where we switched from plates to r
 almanac -vv --date-start 2021-01-01 --date-end 2021-31-12 --fibers
 ```
 
-There's more you can do, and it looks pretty:
+And it looks pretty, even when it warns you about missing exposures:
 
 ![](https://github.com/sdss/almanac/blob/83159e03632e3edbb45bb0c8de9810dec2dc49f1/docs/almanac-example-1.gif)
 
