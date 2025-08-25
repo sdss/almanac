@@ -111,7 +111,7 @@ def parse_mjds(mjd: Optional[int], mjd_start: Optional[int], mjd_end: Optional[i
             "Cannot specify more than one of --mjd, --mjd-start/--mjd-end, --date, --date-start/--date-end"
         )
     if n_given == 0:
-        return (current_mjd, current_mjd, current_mjd)
+        return ((current_mjd, ), current_mjd, current_mjd)
     if mjd is not None:
         if mjd < 0:
             mjd += current_mjd
