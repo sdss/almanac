@@ -70,12 +70,15 @@ docs = [
 [project.scripts]
 almanac = "almanac.cli:main"
 
+[tool.uv]
+package = true
+
 [tool.setuptools]
 zip-safe = false
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["sdss_almanac*"]
+include = ["almanac*"]
 
 [tool.setuptools.package-data]
 almanac = ["etc/*"]
