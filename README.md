@@ -9,10 +9,6 @@ Everything we've got.
 
 ![](https://github.com/sdss/almanac/blob/bde9a277c7b2f4582c36b90cb2a46b7b7de11f17/docs/almanac-example-1.gif)
 
-In verbose mode you can see exposure information in the terminal, and additional per-fiber metadata is stored in the HDF5 files that `almanac` creates.
-
-
-
 ## Installation
 
 `almanac` needs local disk access to raw APOGEE data frames. 
@@ -83,6 +79,10 @@ The fiber mapping tables are cross-matched to the SDSS database to include the S
 By default there is minimal output to the terminal. You can adjust the verbosity level using `-v`:
 - `-v`: show progress display only
 - `-vv`: show progress display and exposure metadata
+
+In verbose mode you can see exposure information in the terminal, and additional per-fiber metadata is stored in the HDF5 files that `almanac` creates.
+
+![](https://github.com/sdss/almanac/blob/a1184f97f5aa27244702baf6e7fd4d3e8a0ec914/docs/almanac-example-2.gif)
 
 ### Outputs
 
