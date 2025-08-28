@@ -80,7 +80,7 @@ def _parse_hexdump_headers(output: List[str], keys: Tuple[str, ...], default: st
 def _get_meta(path: str, has_chips: Tuple[Optional[bool], Optional[bool], Optional[bool]] = (None, None, None), 
              keys: Tuple[str, ...] = RAW_HEADER_KEYS, head: int = 20_000) -> Dict[str, Any]:
     """
-    Extract metadata from APOGEE raw data files using hexdump.
+    Extract metadata from APOGEE raw data files.
     
     :param path:
         Full path to the APOGEE data file.
@@ -118,6 +118,10 @@ def _get_meta(path: str, has_chips: Tuple[Optional[bool], Optional[bool], Option
     headers.update(dict(zip(map(str.lower, RAW_HEADER_KEYS), values)))
     if headers["cartid"].strip() == "FPS":
         headers["cartid"] = 0
+    
+    #headers["size"] = os.path.getsize(path)
+    #n_hdus = check_output(f'strings -n 8 {path} | grep -E "^SIMPLE|^XTENSION" | wc -l', shell=True, text=True)
+    #headers["n_hdus"] = 1 + int(n_hdus.strip())
     return headers
 
 
@@ -338,7 +342,10 @@ def organize_exposures(
         if i == 0:
             last_exposure_id = exposure["exposure"]
             if require_exposures_start_at_1:
-                last_exposure_id = int(str(last_exposure_id)[:4] + "0001")
+                # Here the 0000 is because later we do a range that starts from
+                # `last_exposure_id + 1` (e.g., the one after the current exposure)
+                # But here we start at 0000 so that if the first exposure 
+                last_exposure_id = int(str(last_exposure_id)[:4] + "0000")
 
         observatory, mjd = (exposure["observatory"], exposure["mjd"])
         cutoff = int(getattr(config.sdssdb_exposure_min_mjd, observatory))
