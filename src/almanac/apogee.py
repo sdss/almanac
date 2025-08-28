@@ -1,4 +1,3 @@
-import re
 import os
 import numpy as np
 from glob import glob
@@ -10,11 +9,6 @@ from typing import Optional, Tuple, Dict, List, Set, Generator, Any, Union
 from almanac import utils  # ensures the Yanny table reader/writer is registered
 from almanac.config import config
 from almanac.logger import logger
-
-YANNY_TARGET_MATCH = re.compile(
-    r'STRUCT1 APOGEE_?\w* (?P<target_type>\w+) (?P<source_type>[\w-]+) (?P<target_ra>[\-\+\.\w\d+]+) (?P<target_dec>[\-\+\.\w\d+]+) \d+ '
-    r'\d+ \d+ (?P<fiber_id>\d+) .+ (?P<target_id>"?[\w\d\s\.\-\+]{1,29}"?) [\d ]?(?P<xfocal>[\-\+\.\w\d+]+) (?P<yfocal>[\-\+\.\w\d+]+)$'
-)
 
 RAW_HEADER_KEYS = (
     "DATE-OBS",
@@ -137,9 +131,9 @@ def target_id_to_designation(target_id: str) -> str:
     """
     # The target_ids seem to be styled '2MASS-J...'
     target_id = target_id.strip()
-    return (target_id[5:] if target_id.startswith("2MASS") else target_id).lstrip(
-        "-Jdb_"
-    )
+    target_id = target_id[5:] if target_id.startswith("2MASS") else target_id
+    target_id = str(target_id.lstrip("-Jdb_"))
+    return target_id
 
 
 def get_plateHole_path(plate_id: int) -> str:
@@ -169,19 +163,41 @@ def get_plate_targets(plate_id: int) -> Tuple[Set[str], List[Dict[str, Any]]]:
     :returns:
         A tuple containing a set of 2MASS designations and a list of target dicts.
     """
-    targets, count, designations = ([], 0, set())
-    with open(get_plateHole_path(plate_id), "r") as fp:
-        for line in fp:
-            if line.startswith("STRUCT1 APOGEE"):
-                target = re.match(YANNY_TARGET_MATCH, line).groupdict()
-                target["target_id"] = target["target_id"].strip(' "')
-                target["sdss_id"] = -1
-                designations.add(target_id_to_designation(target["target_id"]))
-                targets.append(target)
-                count += 1
-                if count == 500:
-                    break
+    t = Table.read(
+        get_plateHole_path(plate_id),
+        format="yanny",
+        tablename="STRUCT1",
+    )
+    # restrict to APOGEE 
+    t = t[t["holetype"] == "APOGEE"]
+    # add placeholder sdss_id column
+    t["sdss_id"] = -1 
+    # parse targetids to the expected designation format
+    # TODO: Consider whether we want to keep the original targetids as they are
+    #       and to instead create a column called 'designation' which is what we
+    #       parse against.
+    #       For now just do what we did before so we break less downstream.
+    t["targetids"] = list(map(target_id_to_designation, t["targetids"]))
+    name_mappings = {
+        # existing: desired
+        "targettype": "target_type",
+        "sourcetype": "source_type",
+        "target_ra": "target_ra",
+        "target_dec": "target_dec",
+        "fiberid": "fiber_id",
+        "targetids": "target_id",
+        "xfocal": "xfocal",
+        "yfocal": "yfocal",
+        "sdss_id": "sdss_id"
+    }
+    for name in t.dtype.names:
+        if name not in name_mappings:
+            t.remove_column(name)
+        else:
+            t.rename_column(name, name_mappings[name])
 
+    targets = [dict(zip(t.colnames, row)) for row in t]
+    designations = tuple(set(t[name_mappings.get("targetids", "targetids")]))
     return (designations, targets)
 
 
