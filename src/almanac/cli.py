@@ -75,7 +75,7 @@ def main(
 
     # This keeps the default behaviour as 'query mode' but allows for commands like 'config'.
     if ctx.invoked_subcommand is not None:
-        command = dict(config=config)[ctx.invoked_subcommand]
+        command = dict(config=config, dump=dump)[ctx.invoked_subcommand]
         return ctx.invoke(command, **ctx.params)
 
     from itertools import product
@@ -313,6 +313,51 @@ def set(key, value, **kwargs):
     ConfigManager.save(config, config_path)
     click.echo(f"Updated configuration {key} to {value} in {config_path}")
 
+
+@main.group()
+def dump(**kwargs):
+    """Dump data to a summary file"""
+    pass
+
+# almanac dump star[s] almanac.h5 output.fits
+
+
+@dump.command()
+@click.argument("input_path", type=str)
+@click.argument("output_path", type=str)
+@click.option("--overwrite", is_flag=True, help="Overwrite existing output file")
+def stars(input_path, output_path, overwrite, **kwargs):
+    """Create a star-level summary file"""
+    pass
+
+@dump.command()
+@click.argument("input_path", type=str)
+@click.argument("output_path", type=str)
+@click.option("--overwrite", is_flag=True, help="Overwrite existing output file")
+def visits(input_path, output_path, overwrite,**kwargs):
+    """Create a visit-level summary file"""
+    pass
+
+@dump.command()
+@click.argument("input_path", type=str)
+@click.argument("output_path", type=str)
+@click.option("--overwrite", is_flag=True, help="Overwrite existing output file")
+def exposures(input_path, output_path, overwrite, **kwargs):
+    """Create an exposure-level summary file"""
+
+    import h5py as h5
+    import numpy as np
+    with h5.File(input_path, "r") as fp:
+        groups = None
+        for observatory in ("apo", "lco"):
+            for mjd in fp[observatory].keys():
+                group = fp[f"{observatory}/{mjd}/exposures"][:]
+                if groups is None:
+                    groups = group
+                else:
+                    groups = np.vstack([groups, group])
+                
+        raise a
 
 if __name__ == "__main__":
     main()
