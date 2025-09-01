@@ -3,7 +3,7 @@ import numpy as np
 from glob import glob
 from subprocess import check_output
 from itertools import starmap
-from astropy.table import Table
+from astropy.table import Table, hstack
 from typing import Optional, Tuple, Dict, List, Set, Generator, Any, Union
 
 from almanac import utils  # ensures the Yanny table reader/writer is registered
@@ -118,6 +118,49 @@ def _get_meta(path: str, has_chips: Tuple[Optional[bool], Optional[bool], Option
     #headers["n_hdus"] = 1 + int(n_hdus.strip())
     return headers
 
+def input_id_to_designation(input_id: str) -> Tuple[str, str]:
+    """
+    Convert an input ID to a standardized designation format.
+
+    The input identifier might be a 2MASS-style designation (in many different
+    formats), or a Gaia DR2-style designation, or an input catalog identifier.
+
+    :param input_id:
+        The input ID string.
+    
+    :returns:
+        A two-length tuple containing the designation type, and the cleaned
+        designation identifier.
+    """
+    cleaned = str(input_id).strip().lower()
+    if cleaned == "na":
+        return ("", "")
+    is_gaia = cleaned.startswith("gaia")
+    if is_gaia:
+        dr, source_id = cleaned.split(" ")
+        dr = dr.split("_")[1].lstrip("dr")
+        return (f"Gaia_DR{dr}", source_id)
+    
+    is_twomass = cleaned.startswith("2m") or input_id.startswith("j")
+    if is_twomass:
+        if cleaned.startswith("2mass"):
+            cleaned = cleaned[5:]
+        if cleaned.startswith("2m"):
+            cleaned = cleaned[2:]
+        designation = str(cleaned.lstrip("-jdb_"))
+        return ("2MASS", designation)
+    else:
+        try:
+            catalogid = np.int64(cleaned)
+        except:
+            return ("Unknown", input_id)
+        else:
+            return ("catalog", cleaned)            
+
+    
+    
+
+
 
 def target_id_to_designation(target_id: str) -> str:
     """
@@ -136,7 +179,7 @@ def target_id_to_designation(target_id: str) -> str:
     return target_id
 
 
-def get_plateHole_path(plate_id: int) -> str:
+def get_plate_hole_path(plate_id: int) -> str:
     """
     Get the path to the plateHole file for a given plate ID.
 
@@ -151,54 +194,107 @@ def get_plateHole_path(plate_id: int) -> str:
     logger.debug(f"plateHole path: {path}")
     return path
 
+def get_plugMapP_path(plate_id: int) -> str:
+    plate_id = int(plate_id)
+    # TODO: why does the plugmap path use n digits instead of 6 like plateHole?
+    path = f"{config.platelist_dir}/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plPlugMapP-{plate_id:.0f}.par"
+    logger.debug(f"PlugMap path: {path}")
+    return path
 
-def get_plate_targets(plate_id: int) -> Tuple[Set[str], List[Dict[str, Any]]]:
+def get_plugMapH_path(plate_id: int) -> str:
+    plate_id = int(plate_id)
+    # TODO: why does the plugmap path use n digits instead of 6 like plateHole?
+    path = f"{config.platelist_dir}/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plPlugMapH-{plate_id:.0f}.par"
+    logger.debug(f"plPlugMapH path: {path}")
+    return path
+
+#def get_plugMapM_path(plate_id: int, mjd: int) -> str:
+
+#def get_plugMapA_path(plate_id: int, mjd: int) -> str:
+
+
+
+def get_plate_targets(
+    plate_id: int,
+    mjd: Optional[int] = None,
+    observatory: Optional[str] = None,
+    tol: Optional[float] = 1e-5,
+) -> Tuple[Set[str], List[Dict[str, Any]]]:
     """
     Return a set of 2MASS designations and a list of dicts containing the target information
     for the given `plate_id`.
 
     :param plate_id:
         The plate ID.
+
+    :param mjd:
+        The Modified Julian Date.
     
+    :param observatory:
+        The observatory name (e.g. "apo"). Currently unused but may be useful for future extensions.
+
     :returns:
         A tuple containing a set of 2MASS designations and a list of target dicts.
     """
-    t = Table.read(
-        get_plateHole_path(plate_id),
+
+    planned_holes = Table.read(
+        get_plate_hole_path(plate_id),
         format="yanny",
         tablename="STRUCT1",
     )
-    # restrict to APOGEE 
-    t = t[t["holetype"] == "APOGEE"]
-    # add placeholder sdss_id column
-    t["sdss_id"] = -1 
-    # parse targetids to the expected designation format
-    # TODO: Consider whether we want to keep the original targetids as they are
-    #       and to instead create a column called 'designation' which is what we
-    #       parse against.
-    #       For now just do what we did before so we break less downstream.
-    t["targetids"] = list(map(target_id_to_designation, t["targetids"]))
-    name_mappings = {
-        # existing: desired
-        "targettype": "target_type",
-        "sourcetype": "source_type",
-        "target_ra": "target_ra",
-        "target_dec": "target_dec",
-        "fiberid": "fiber_id",
-        "targetids": "target_id",
-        "xfocal": "xfocal",
-        "yfocal": "yfocal",
-        "sdss_id": "sdss_id"
-    }
-    for name in t.dtype.names:
-        if name not in name_mappings:
-            t.remove_column(name)
-        else:
-            t.rename_column(name, name_mappings[name])
 
-    targets = [dict(zip(t.colnames, row)) for row in t]
-    designations = tuple(set(t[name_mappings.get("targetids", "targetids")]))
-    return (designations, targets)
+    plugged_holes = Table.read(
+        get_plugMapP_path(plate_id),
+        format="yanny",
+        tablename="PLUGMAPOBJ"
+    )
+
+    # We need a function that will match the (`target_ra`, `target_dec`) from 
+    # `planned_holes` to (`ra`, `dec`) from `plugged_holes` allowing for a 
+    # small tolerance in either column match.
+    ra_dist = cdist(
+        planned_holes["target_ra"].reshape((-1, 1)),
+        plugged_holes["ra"].reshape((-1, 1)),
+    )
+    dec_dist = cdist(
+        planned_holes["target_dec"].reshape((-1, 1)),
+        plugged_holes["dec"].reshape((-1, 1)),
+    )
+
+    meets_tolerance = (ra_dist < tol) & (dec_dist < tol)
+    n_matches_to_plugged_holes = np.sum(meets_tolerance, axis=0)
+
+    has_match = (n_matches_to_plugged_holes == 1)
+    N = np.sum(n_matches_to_plugged_holes > 1)
+    if N > 0:
+        logger.warning(
+            f"{N} plugged holes match multiple planned holes on plate {plate_id}! "
+            f"Following indices are all 1-indexed."
+        )
+        for plugged_index in np.where(n_matches_to_plugged_holes > 1)[0]:
+            n = n_matches_to_plugged_holes[plugged_index]
+            for i, planned_index in enumerate(np.where(meets_tolerance[:, plugged_index])[0], start=1):
+                logger.warning(
+                    f"Plugged hole index {plugged_index + 1} match {i + 1}/{n} within {tol:.1e} has plugged "
+                    f"coordinates (ra={plugged_holes['ra'][plugged_index]:.5f}, dec={plugged_holes['dec'][plugged_index]:.5f}) "
+                    f"matched to planned coordinates (ra={planned_holes['target_ra'][planned_index]:.5f}, dec={planned_holes['target_dec'][planned_index]:.5f})."
+                )
+
+    dist = np.sqrt(ra_dist**2 + dec_dist**2)
+    planned_hole_indices = np.argmin(dist[:, has_match], axis=0)
+
+    t = hstack(
+        [
+            plugged_holes[has_match], 
+            planned_holes[planned_hole_indices]
+        ],
+        metadata_conflicts="silent",
+        uniq_col_name="{table_name}_{col_name}",
+        table_names=("plugged", "planned")
+    )
+    t["target_type"], t["target_id"] = zip(*list(map(input_id_to_designation, t["target_ids"])))
+    return t
+
 
 
 def get_confSummary_path(observatory: str, config_id: int) -> str:
@@ -513,7 +609,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, xmatch: b
         )
         logger.debug(f"{observatory}/{mjd} has {len(catalogids)} unique catalogids")
         twomass_designations, plate_fiber_maps = get_fiber_mappings(
-            get_plate_targets, plateids
+            get_plate_targets, plateids, observatory, mjd
         )
         logger.debug(f"{observatory}/{mjd} has {len(twomass_designations)} unique 2mass designations")
 
