@@ -32,7 +32,7 @@ class Config:
     platelist_dir: str = "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/plates/"
     sdsscore_dir: str = "/uufs/chpc.utah.edu/common/home/sdss50/software/git/sdss/sdsscore/main/"
     apogee_dir: str = "/uufs/chpc.utah.edu/common/home/sdss/sdsswork/data/apogee/"
-
+    mapper_dir: str = "/uufs/chpc.utah.edu/common/home/sdss50/sdsswork/data/mapper/"
 
 def get_config_path():
     config_dir = Path.home() / ".almanac"

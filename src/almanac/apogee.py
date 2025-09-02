@@ -3,7 +3,7 @@ import numpy as np
 from glob import glob
 from subprocess import check_output
 from itertools import starmap
-from astropy.table import Table, hstack
+from astropy.table import Table, hstack, unique
 from typing import Optional, Tuple, Dict, List, Set, Generator, Any, Union
 
 from almanac import utils  # ensures the Yanny table reader/writer is registered
@@ -179,39 +179,12 @@ def target_id_to_designation(target_id: str) -> str:
     return target_id
 
 
-def get_plate_hole_path(plate_id: int) -> str:
-    """
-    Get the path to the plateHole file for a given plate ID.
-
-    :param plate_id:
-        The plate ID.
-    
-    :returns:
-        The path to the plateHole file.
-    """
-    plate_id = int(plate_id)
-    path = f"{config.platelist_dir}/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plateHoles-{plate_id:0>6.0f}.par"
-    logger.debug(f"plateHole path: {path}")
-    return path
-
 def get_plugMapP_path(plate_id: int) -> str:
     plate_id = int(plate_id)
     # TODO: why does the plugmap path use n digits instead of 6 like plateHole?
     path = f"{config.platelist_dir}/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plPlugMapP-{plate_id:.0f}.par"
     logger.debug(f"PlugMap path: {path}")
     return path
-
-def get_plugMapH_path(plate_id: int) -> str:
-    plate_id = int(plate_id)
-    # TODO: why does the plugmap path use n digits instead of 6 like plateHole?
-    path = f"{config.platelist_dir}/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plPlugMapH-{plate_id:.0f}.par"
-    logger.debug(f"plPlugMapH path: {path}")
-    return path
-
-#def get_plugMapM_path(plate_id: int, mjd: int) -> str:
-
-#def get_plugMapA_path(plate_id: int, mjd: int) -> str:
-
 
 
 def get_plate_targets(
@@ -295,61 +268,6 @@ def get_plate_targets(
     t["target_type"], t["target_id"] = zip(*list(map(input_id_to_designation, t["target_ids"])))
     return t
 
-
-
-def get_confSummary_path(observatory: str, config_id: int) -> str:
-    """
-    Get the path to the confSummary(FS) file for a given observatory and configuration ID.
-
-    :param observatory:
-        The observatory name (e.g. "apo").
-    
-    :param config_id:
-        The configuration ID.
-    
-    :returns:
-        The path to the confSummary(FS) file.
-    """
-    # we want the confSummaryFS file. The F means that is has the actual robot positions measured
-    # measured by the field view camera. The S means that that it has Jose's estimate of whether
-    # unassigned APOGEE fibers can be used as sky.
-
-    # config_ids are left-padded to 6 digits and foldered by the first 3 and first 4 digits.
-    # the final file name does not used the padded config_id
-    # For example config_id 1838 is in summary_files/001XXX/0018XX/confSummaryFS-1838.par
-    c = str(config_id)
-    directory = f"{config.sdsscore_dir}/{observatory}/summary_files/{c[:-3].zfill(3)}XXX/{c[:-2].zfill(4)}XX/"
-
-    # fall back to confSummary if confSummaryFS does not exist
-    path = f"{directory}/confSummaryFS-{config_id}.par"
-    if not os.path.exists(path):
-        path = f"{directory}/confSummary-{config_id}.par"
-    logger.debug(f"confSummary(FS) path: {path}")
-
-    return path
-
-
-def get_fps_targets(config_id: int, observatory: str) -> Tuple[Set[int], List[Dict[str, Any]]]:
-    """
-    Return a list of dicts containing the target information for the given `observatory` and `config_id`.
-
-    :param config_id:
-        The configuration ID.
-
-    :param observatory:
-        The observatory name (e.g. "apo").
-        
-    :returns:
-        A tuple containing a set of catalog IDs and a list of target mapping dictionaries.
-    """
-    t = Table.read(
-        get_confSummary_path(observatory, config_id),
-        format="yanny",
-        tablename="FIBERMAP",
-    )
-    t["sdss_id"] = -1
-    mapping = [dict(zip(t.colnames, row)) for row in t]
-    return (set(t["catalogid"]), mapping)
 
 
 def get_exposure_metadata(observatory: str, mjd: int, **kwargs) -> Generator[Dict[str, Any], None, None]:
@@ -513,7 +431,7 @@ def get_expected_exposure_metadata(observatory: str, mjd: int) -> Dict[int, Dict
     This is useful for identifying missing exposures.
     """
 
-    if mjd < getattr(config.sdssdb_exposure_min_mjd, observatory):
+    if mjd < int(getattr(config.sdssdb_exposure_min_mjd, observatory)):
         return dict()
 
     from almanac.database import opsdb
@@ -593,24 +511,26 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, xmatch: b
         "objects": get_object_sequence_indices(exposures),
         "arclamps": get_arclamp_sequence_indices(exposures),
     }
-
+    raise a
     fiber_maps = dict(fps={}, plates={})
     if fibers:
-        configids = set(exposures["configid"]).difference({"", "-1", "-999"})
-        plateids = set(exposures["plateid"]).difference(
-            {"", "0", "-1"}
-        )  # plate ids often 0
-        # make sure neither set contains None
-        configids.discard(None)
-        plateids.discard(None)
+        configids = set(exposures["configid"]).difference({"", "-1", "-999", None})
         logger.debug(f"{observatory}/{mjd} checking fibers")
         catalogids, fps_fiber_maps = get_fiber_mappings(
             get_fps_targets, configids, observatory
         )
         logger.debug(f"{observatory}/{mjd} has {len(catalogids)} unique catalogids")
-        twomass_designations, plate_fiber_maps = get_fiber_mappings(
-            get_plate_targets, plateids, observatory, mjd
-        )
+    
+        # Matching to the correct plate requires us to know which version of the
+        # plate was plugged. This is stored in the `name` header in the exposure
+        plate_fiber_maps = {}
+        for plate_id, name in unique(exposures["plateid", "name"]):
+            assert plate_id not in plate_fiber_maps, "Contact Andy, he will cry."
+            if plate_id in {"", "0", "-1"}:
+                continue
+            plate_fiber_maps[plate_id] = get_plate_targets(observatory, mjd, plate_id, name)
+
+            
         logger.debug(f"{observatory}/{mjd} has {len(twomass_designations)} unique 2mass designations")
 
         fiber_maps["fps"].update(fps_fiber_maps)
