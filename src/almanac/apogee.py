@@ -9,229 +9,35 @@ from typing import Optional, Tuple, Dict, List, Set, Generator, Any, Union
 from almanac import utils  # ensures the Yanny table reader/writer is registered
 from almanac.config import config
 from almanac.logger import logger
-
-RAW_HEADER_KEYS = (
-    "DATE-OBS",
-    "FIELDID",
-    "DESIGNID",
-    "CONFIGID",
-    "SEEING",
-    "EXPTYPE",
-    "NREAD",
-    "IMAGETYP",
-    "LAMPQRTZ",
-    "LAMPTHAR",
-    "LAMPUNE",
-    "FOCUS",
-    "NAME",
-    "PLATEID",
-    "CARTID",
-    "MAPID",
-    "PLATETYP",
-    "OBSCMT",
-    "COLLPIST",
-    "COLPITCH",
-    "DITHPIX",
-    "TCAMMID",
-    "TLSDETB",
-)
+from scipy.spatial.distance import cdist
 
 
-def _parse_hexdump_headers(output: List[str], keys: Tuple[str, ...], default: str = "") -> List[str]:
+def mjd_to_exposure_prefix(mjd: int) -> int:
     """
-    Parse hexdump output to extract header key-value pairs.
-    
-    :param output:
-        List of strings from hexdump output containing header information.
-    :param keys:
-        Tuple of header keys to look for in the output.
-    :param default:
-        Default value to use when a key is not found.
-    
-    :returns:
-        List of header values corresponding to the input keys, with defaults for missing keys.
-    """
-    meta = [default] * len(keys)
-    for line in output:
-        try:
-            key, value = line.split("=", 2)
-        except ValueError:  # grep'd something in the data
-            continue
-
-        key = key.strip()
-        if key in keys:
-            index = keys.index(key)
-            if "/" in value:
-                # could be comment
-                *parts, comment = value.split("/")
-                value = "/".join(parts)
-
-            value = value.strip("' ")
-            meta[index] = value.strip()
-    return meta
-
-
-def _get_meta(path: str, has_chips: Tuple[Optional[bool], Optional[bool], Optional[bool]] = (None, None, None), 
-             keys: Tuple[str, ...] = RAW_HEADER_KEYS, head: int = 20_000) -> Dict[str, Any]:
-    """
-    Extract metadata from APOGEE raw data files.
-    
-    :param path:
-        Full path to the APOGEE data file.
-    :param has_chips:
-        Tuple indicating which chips (a, b, c) are present in the data.
-    :param keys:
-        Tuple of header keys to extract from the file.
-    :param head:
-        Number of bytes to read from the beginning of the file.
-    
-    :returns:
-        Dictionary containing extracted metadata including observatory, MJD, exposure info, and header values.
-    """
-    keys_str = "|".join(keys)
-    commands = " | ".join(
-        ['hexdump -n {head} -e \'80/1 "%_p" "\\n"\' {path}', 'egrep "{keys_str}"']
-    ).format(head=head, path=path, keys_str=keys_str)
-    outputs = check_output(commands, shell=True, text=True)
-    outputs = outputs.strip().split("\n")
-    values = _parse_hexdump_headers(outputs, keys)
-    _, observatory, mjd, basename = path.rsplit("/", 3)
-    prefix, chip, exposure = basename.split("-")
-    exposure = exposure.strip(".apz")
-    headers = dict(
-        observatory=observatory,
-        mjd=int(mjd),
-        exposure=int(exposure),
-        prefix=prefix,
-        chip=chip,
-        path_exists=os.path.exists(path),
-    )
-    for prefix, has_chip in zip("abc", has_chips):
-        headers[f"readout_chip_{prefix}"] = has_chip
-
-    headers.update(dict(zip(map(str.lower, RAW_HEADER_KEYS), values)))
-    if headers["cartid"].strip() == "FPS":
-        headers["cartid"] = 0
-    
-    #headers["size"] = os.path.getsize(path)
-    #n_hdus = check_output(f'strings -n 8 {path} | grep -E "^SIMPLE|^XTENSION" | wc -l', shell=True, text=True)
-    #headers["n_hdus"] = 1 + int(n_hdus.strip())
-    return headers
-
-def input_id_to_designation(input_id: str) -> Tuple[str, str]:
-    """
-    Convert an input ID to a standardized designation format.
-
-    The input identifier might be a 2MASS-style designation (in many different
-    formats), or a Gaia DR2-style designation, or an input catalog identifier.
-
-    :param input_id:
-        The input ID string.
-    
-    :returns:
-        A two-length tuple containing the designation type, and the cleaned
-        designation identifier.
-    """
-    cleaned = str(input_id).strip().lower()
-    if cleaned == "na":
-        return ("", "")
-    is_gaia = cleaned.startswith("gaia")
-    if is_gaia:
-        dr, source_id = cleaned.split(" ")
-        dr = dr.split("_")[1].lstrip("dr")
-        return (f"Gaia_DR{dr}", source_id)
-    
-    is_twomass = cleaned.startswith("2m") or input_id.startswith("j")
-    if is_twomass:
-        if cleaned.startswith("2mass"):
-            cleaned = cleaned[5:]
-        if cleaned.startswith("2m"):
-            cleaned = cleaned[2:]
-        designation = str(cleaned.lstrip("-jdb_"))
-        return ("2MASS", designation)
-    else:
-        try:
-            catalogid = np.int64(cleaned)
-        except:
-            return ("Unknown", input_id)
-        else:
-            return ("catalog", cleaned)            
-
-    
-    
-
-
-
-def target_id_to_designation(target_id: str) -> str:
-    """
-    Convert a target ID to a standardized designation format.
-    
-    :param target_id:
-        The target ID string, typically in format like '2MASS-J...' or similar.
-    
-    :returns:
-        Cleaned designation string with prefixes removed.
-    """
-    # The target_ids seem to be styled '2MASS-J...'
-    target_id = target_id.strip()
-    target_id = target_id[5:] if target_id.startswith("2MASS") else target_id
-    target_id = str(target_id.lstrip("-Jdb_"))
-    return target_id
-
-
-def get_plugMapP_path(plate_id: int) -> str:
-    plate_id = int(plate_id)
-    # TODO: why does the plugmap path use n digits instead of 6 like plateHole?
-    path = f"{config.platelist_dir}/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plPlugMapP-{plate_id:.0f}.par"
-    logger.debug(f"PlugMap path: {path}")
-    return path
-
-
-def get_plate_targets(
-    plate_id: int,
-    mjd: Optional[int] = None,
-    observatory: Optional[str] = None,
-    tol: Optional[float] = 1e-5,
-) -> Tuple[Set[str], List[Dict[str, Any]]]:
-    """
-    Return a set of 2MASS designations and a list of dicts containing the target information
-    for the given `plate_id`.
-
-    :param plate_id:
-        The plate ID.
+    Convert Modified Julian Date to exposure prefix.
 
     :param mjd:
-        The Modified Julian Date.
-    
-    :param observatory:
-        The observatory name (e.g. "apo"). Currently unused but may be useful for future extensions.
+        Modified Julian Date.
 
     :returns:
-        A tuple containing a set of 2MASS designations and a list of target dicts.
+        Exposure prefix number.
     """
+    return (int(mjd) - 55_562) * 10_000
 
-    planned_holes = Table.read(
-        get_plate_hole_path(plate_id),
-        format="yanny",
-        tablename="STRUCT1",
-    )
 
-    plugged_holes = Table.read(
-        get_plugMapP_path(plate_id),
-        format="yanny",
-        tablename="PLUGMAPOBJ"
-    )
 
-    # We need a function that will match the (`target_ra`, `target_dec`) from 
-    # `planned_holes` to (`ra`, `dec`) from `plugged_holes` allowing for a 
-    # small tolerance in either column match.
+def match_planned_to_plugged(plate_hole_path, plug_map_path, tol=1e-5):
+
+    planned = Table.read(plate_hole_path, format="yanny", tablename="STRUCT1")
+    plugged = Table.read(plug_map_path, format="yanny", tablename="PLUGMAPOBJ")
+
     ra_dist = cdist(
-        planned_holes["target_ra"].reshape((-1, 1)),
-        plugged_holes["ra"].reshape((-1, 1)),
+        planned["target_ra"].reshape((-1, 1)),
+        plugged["ra"].reshape((-1, 1)),
     )
     dec_dist = cdist(
-        planned_holes["target_dec"].reshape((-1, 1)),
-        plugged_holes["dec"].reshape((-1, 1)),
+        planned["target_dec"].reshape((-1, 1)),
+        plugged["dec"].reshape((-1, 1)),
     )
 
     meets_tolerance = (ra_dist < tol) & (dec_dist < tol)
@@ -256,31 +62,156 @@ def get_plate_targets(
     dist = np.sqrt(ra_dist**2 + dec_dist**2)
     planned_hole_indices = np.argmin(dist[:, has_match], axis=0)
 
-    t = hstack(
+    rows = hstack(
         [
-            plugged_holes[has_match], 
-            planned_holes[planned_hole_indices]
+            plugged[has_match],
+            planned[planned_hole_indices]
         ],
         metadata_conflicts="silent",
-        uniq_col_name="{table_name}_{col_name}",
-        table_names=("plugged", "planned")
+        uniq_col_name="{table_name}{col_name}",
+        table_names=("", "planned_")
     )
-    t["target_type"], t["target_id"] = zip(*list(map(input_id_to_designation, t["target_ids"])))
-    return t
+    return (planned, plugged, rows)
 
+
+def get_headers(path, head=20_000):
+    keys = (
+        "DATE-OBS", "FIELDID", "DESIGNID", "CONFIGID", "SEEING", "EXPTYPE",
+        "NREAD", "IMAGETYP", "LAMPQRTZ", "LAMPTHAR", "LAMPUNE", "FOCUS",
+        "NAME", "PLATEID", "CARTID", "MAPID", "PLATETYP", "OBSCMT",
+        "COLLPIST", "COLPITCH", "DITHPIX", "TCAMMID", "TLSDETB",
+    )
+    keys_str = "|".join(keys)
+
+    commands = " | ".join(
+        ['hexdump -n {head} -e \'80/1 "%_p" "\\n"\' {path}', 'egrep "{keys_str}"']
+    ).format(head=head, path=path, keys_str=keys_str)
+    outputs = check_output(commands, shell=True, text=True)
+    outputs = outputs.strip().split("\n")
+
+    values = _parse_headers(outputs, keys)
+    return dict(zip(map(str.lower, keys), values))
+
+
+
+def _parse_headers(output: List[str], keys: Tuple[str, ...], default=None) -> List[str]:
+    """
+    Parse hexdump output to extract header key-value pairs.
+
+    :param output:
+        List of strings from hexdump output containing header information.
+    :param keys:
+        Tuple of header keys to look for in the output.
+    :param default:
+        Default value to use when a key is not found.
+
+    :returns:
+        List of header values corresponding to the input keys, with defaults for missing keys.
+    """
+    meta = [default] * len(keys)
+    for line in output:
+        try:
+            key, value = line.split("=", 2)
+        except ValueError:  # grep'd something in the data
+            continue
+
+        key = key.strip()
+        if key in keys:
+            index = keys.index(key)
+            if "/" in value:
+                # could be comment
+                *parts, comment = value.split("/")
+                value = "/".join(parts)
+
+            value = value.strip("' ")
+            meta[index] = value.strip()
+    return meta
+
+
+
+
+
+
+def input_id_to_designation(input_id: str) -> Tuple[str, str]:
+    """
+    Convert an input ID to a standardized designation format.
+
+    The input identifier might be a 2MASS-style designation (in many different
+    formats), or a Gaia DR2-style designation, or an input catalog identifier.
+
+    :param input_id:
+        The input ID string.
+
+    :returns:
+        A two-length tuple containing the designation type, and the cleaned
+        designation identifier.
+    """
+    cleaned = str(input_id).strip().lower()
+    if cleaned == "na":
+        return ("", "")
+    is_gaia = cleaned.startswith("gaia")
+    if is_gaia:
+        dr, source_id = cleaned.split(" ")
+        dr = dr.split("_")[1].lstrip("dr")
+        return (f"Gaia_DR{dr}", source_id)
+
+    is_twomass = cleaned.startswith("2m") or input_id.startswith("j")
+    if is_twomass:
+        if cleaned.startswith("2mass"):
+            cleaned = cleaned[5:]
+        if cleaned.startswith("2m"):
+            cleaned = cleaned[2:]
+        designation = str(cleaned.lstrip("-jdb_"))
+        return ("2MASS", designation)
+    else:
+        try:
+            catalogid = np.int64(cleaned)
+        except:
+            return ("Unknown", input_id)
+        else:
+            return ("catalog", cleaned)
+
+
+
+
+
+
+def target_id_to_designation(target_id: str) -> str:
+    """
+    Convert a target ID to a standardized designation format.
+
+    :param target_id:
+        The target ID string, typically in format like '2MASS-J...' or similar.
+
+    :returns:
+        Cleaned designation string with prefixes removed.
+    """
+    # The target_ids seem to be styled '2MASS-J...'
+    target_id = target_id.strip()
+    target_id = target_id[5:] if target_id.startswith("2MASS") else target_id
+    target_id = str(target_id.lstrip("-Jdb_"))
+    return target_id
+
+
+def get_plugMapP_path(plate_id: int) -> str:
+    plate_id = int(plate_id)
+    # TODO: why does the plugmap path use n digits instead of 6 like plateHole?
+    path = f"{config.platelist_dir}/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plPlugMapP-{plate_id:.0f}.par"
+    logger.debug(f"PlugMap path: {path}")
+    return path
 
 
 def get_exposure_metadata(observatory: str, mjd: int, **kwargs) -> Generator[Dict[str, Any], None, None]:
     """
     Return a generator of metadata for all exposures taken from a given observatory on a given MJD.
-    
+
     :param observatory:
         The observatory name (e.g. "apo").
     :param mjd:
         The Modified Julian Date.
     :param kwargs:
         Additional keyword arguments passed to _get_meta function.
-        
+
     :yields:
         Dictionary containing exposure metadata for each exposure found.
     """
@@ -290,14 +221,14 @@ def get_exposure_metadata(observatory: str, mjd: int, **kwargs) -> Generator[Dic
 
 
 def organize_exposures(
-    exposures: List[Dict[str, Any]], 
-    expected_exposures: Optional[Dict[int, Dict[str, Any]]] = None, 
-    require_exposures_start_at_1: bool = True, 
+    exposures: List[Dict[str, Any]],
+    expected_exposures: Optional[Dict[int, Dict[str, Any]]] = None,
+    require_exposures_start_at_1: bool = True,
     **kwargs
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
     Identify any missing exposures (based on non-contiguous exposure numbers) and fill them with missing image types.
-    
+
     :param exposures:
         List of exposure dictionaries containing metadata.
     :param expected_exposures:
@@ -306,7 +237,7 @@ def organize_exposures(
         Whether to require exposure numbering to start at 1.
     :param kwargs:
         Additional keyword arguments to include in missing exposure template.
-        
+
     :returns:
         Tuple containing the organized list of exposures and list of warning messages.
     """
@@ -374,7 +305,7 @@ def organize_exposures(
             if require_exposures_start_at_1:
                 # Here the 0000 is because later we do a range that starts from
                 # `last_exposure_id + 1` (e.g., the one after the current exposure)
-                # But here we start at 0000 so that if the first exposure 
+                # But here we start at 0000 so that if the first exposure
                 last_exposure_id = int(str(last_exposure_id)[:4] + "0000")
 
         observatory, mjd = (exposure["observatory"], exposure["mjd"])
@@ -385,7 +316,7 @@ def organize_exposures(
             corrected.append(missing)
             messages.append(message)
 
-        expected_exposures.pop(exposure["exposure"], None)         
+        expected_exposures.pop(exposure["exposure"], None)
         corrected.append({**missing_row_template, **exposure})
         last_exposure_id = exposure["exposure"]
 
@@ -402,27 +333,15 @@ def organize_exposures(
 def mjd_to_exposure_prefix(mjd: int) -> int:
     """
     Convert Modified Julian Date to exposure prefix.
-    
+
     :param mjd:
         Modified Julian Date.
-        
+
     :returns:
         Exposure prefix number.
     """
     return (mjd - 55_562) * 10_000
 
-
-def exposure_prefix_to_mjd(prefix: int) -> int:
-    """
-    Convert exposure prefix back to Modified Julian Date.
-    
-    :param prefix:
-        Exposure prefix number.
-        
-    :returns:
-        Modified Julian Date.
-    """
-    return (prefix // 10_000) + 55_562
 
 
 def get_expected_exposure_metadata(observatory: str, mjd: int) -> Dict[int, Dict]:
@@ -465,7 +384,7 @@ def get_expected_exposure_metadata(observatory: str, mjd: int) -> Dict[int, Dict
 def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, xmatch: bool = False, **kwargs) -> Tuple[str, int, List[str], Optional[Table], Optional[Dict[str, Any]], Optional[Dict[str, Dict[Union[int, str], Table]]]]:
     """
     Return comprehensive almanac data for all exposures taken from a given observatory on a given MJD.
-    
+
     :param observatory:
         The observatory name (e.g. "apo").
     :param mjd:
@@ -476,7 +395,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, xmatch: b
         Whether to perform cross-matching with catalog database.
     :param kwargs:
         Additional keyword arguments passed to other functions.
-        
+
     :returns:
         Tuple containing:
         - observatory name
@@ -520,7 +439,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, xmatch: b
             get_fps_targets, configids, observatory
         )
         logger.debug(f"{observatory}/{mjd} has {len(catalogids)} unique catalogids")
-    
+
         # Matching to the correct plate requires us to know which version of the
         # plate was plugged. This is stored in the `name` header in the exposure
         plate_fiber_maps = {}
@@ -530,7 +449,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, xmatch: b
                 continue
             plate_fiber_maps[plate_id] = get_plate_targets(observatory, mjd, plate_id, name)
 
-            
+
         logger.debug(f"{observatory}/{mjd} has {len(twomass_designations)} unique 2mass designations")
 
         fiber_maps["fps"].update(fps_fiber_maps)
@@ -612,7 +531,7 @@ def get_sequence_exposure_numbers(
 ) -> List[Tuple[int, int]]:
     """
     Get exposure number ranges for sequences of a specific image type.
-    
+
     :param exposures:
         Astropy Table containing exposure metadata.
     :param imagetyp:
@@ -623,7 +542,7 @@ def get_sequence_exposure_numbers(
         Whether to require exposure numbers to be contiguous within groups.
     :param require_path_exists:
         Whether to require that the file path exists on disk.
-        
+
     :returns:
         List of tuples containing (start_exposure, end_exposure) for each sequence.
     """
@@ -659,12 +578,12 @@ def get_sequence_exposure_numbers(
 def get_arclamp_sequence_indices(exposures: Table, **kwargs) -> np.ndarray:
     """
     Get array indices for ArcLamp exposure sequences.
-    
+
     :param exposures:
         Astropy Table containing exposure metadata.
     :param kwargs:
         Additional keyword arguments passed to get_sequence_exposure_numbers.
-        
+
     :returns:
         Numpy array of sequence indices for ArcLamp exposures.
     """
@@ -680,12 +599,12 @@ def get_arclamp_sequence_indices(exposures: Table, **kwargs) -> np.ndarray:
 def get_object_sequence_indices(exposures: Table, **kwargs) -> np.ndarray:
     """
     Get array indices for Object exposure sequences.
-    
+
     :param exposures:
         Astropy Table containing exposure metadata.
     :param kwargs:
         Additional keyword arguments passed to get_sequence_exposure_numbers.
-        
+
     :returns:
         Numpy array of sequence indices for Object exposures.
     """
@@ -704,10 +623,10 @@ def get_object_sequence_indices(exposures: Table, **kwargs) -> np.ndarray:
 def get_unique_exposure_paths(paths: List[str]) -> List[Tuple[str, List[bool]]]:
     """
     Process a list of file paths to find unique exposures and determine which chips are available.
-    
+
     :param paths:
         List of file paths to APOGEE exposure files.
-        
+
     :returns:
         List of tuples containing (path_to_exposure, list_of_chip_availability).
     """
@@ -734,14 +653,14 @@ def get_unique_exposure_paths(paths: List[str]) -> List[Tuple[str, List[bool]]]:
 def get_fiber_mappings(f: callable, iterable: Union[List[int], List[str]], *args) -> Tuple[Set[Union[int, str]], Dict[Union[int, str], List[Dict[str, Any]]]]:
     """
     Apply a function to get fiber mappings for multiple items and collect all unique IDs.
-    
+
     :param f:
         Function to call for each item (e.g., get_fps_targets, get_plate_targets).
     :param iterable:
         Collection of items to process (config IDs, plate IDs, etc.).
     :param args:
         Additional arguments to pass to the function.
-        
+
     :returns:
         Tuple containing a set of all unique IDs and a dictionary mapping items to their targets.
     """
