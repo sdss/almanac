@@ -1,0 +1,411 @@
+observatory,mjd,plate,exposure,image_type,notes
+apo,55929,5604,20,dome_flat,appears dark - use domeflat from subsequent plate/cartridge (34)
+apo,55929,5604,21,dome_flat,appears dark - use domeflat from subsequent plate/cartridge (34)
+apo,55991,,103,,appears dark
+apo,55999,,62,,appears dark
+apo,56048,5646,,,no dome flat - use flat from previous cartridge
+apo,56067,,18,calibration,no light
+apo,56067,,19,calibration,no light
+apo,56067,,20,calibration,no light
+apo,56067,,21,calibration,no light
+apo,56067,,22,calibration,no light
+apo,56067,,23,calibration,no light
+apo,56067,,24,calibration,no light
+apo,56067,,25,calibration,no light
+apo,56169,,96,calibration,no light
+apo,56169,,97,calibration,no light
+apo,56169,,98,calibration,no light
+apo,56169,,99,calibration,no light
+apo,56169,,100,calibration,no light
+apo,56169,,101,calibration,no light
+apo,56169,,102,calibration,no light
+apo,56213,,-7,calibration,calibrations look like darks
+apo,56231,,98,dome_flat,dark - need other flat for plate 5517 (use internal 105)
+apo,56234,6212,,dome_flat,no dome flat - use flat from previous cartridge
+apo,56259,,41,dome_flat,observers reported this dome flat as looking funny on initial reads
+apo,56261,,108,calibration,calibrations appear as dark frames
+apo,56261,,109,calibration,calibrations appear as dark frames
+apo,56261,,110,calibration,calibrations appear as dark frames
+apo,56261,,111,calibration,calibrations appear as dark frames
+apo,56261,,112,calibration,calibrations appear as dark frames
+apo,56261,,113,calibration,calibrations appear as dark frames
+apo,56261,,114,calibration,calibrations appear as dark frames
+apo,56265,,85,calibration,calibrations appear as dark frames
+apo,56265,,86,calibration,calibrations appear as dark frames
+apo,56265,,87,calibration,calibrations appear as dark frames
+apo,56265,,88,calibration,calibrations appear as dark frames
+apo,56265,,89,calibration,calibrations appear as dark frames
+apo,56265,,90,calibration,calibrations appear as dark frames
+apo,56265,,91,calibration,calibrations appear as dark frames
+apo,56295,,10,object,aborted exposures - no dome
+apo,56295,,11,object,aborted exposures - no dome
+apo,56295,,12,object,aborted exposures - no dome
+apo,56295,,13,object,aborted exposures - no dome
+apo,56295,,14,object,aborted exposures - no dome
+apo,56295,,15,object,aborted exposures - no dome
+apo,56295,,16,object,aborted exposures - no dome
+apo,56314,,48,object,aborted exposure
+apo,56324,,65,object,aborted exposure
+apo,56346,,37,object,aborted exposure
+apo,56350,,11,object,reduction problems
+apo,56350,,12,object,reduction problems
+apo,56350,,13,object,reduction problems
+apo,56350,,14,object,reduction problems
+apo,56350,,15,object,reduction problems
+apo,56350,,16,object,reduction problems
+apo,56350,,17,object,reduction problems
+apo,56350,,18,object,reduction problems
+apo,56363,,155,object,aborted exposure
+apo,56363,,159,object,dither problems
+apo,56363,,160,object,dither problems
+apo,56363,,161,object,dither problems
+apo,56363,,162,object,dither problems
+apo,56370,,164,object,aborted exposure
+apo,56372,,37,object,weather - aborted exposures/no dome
+apo,56372,,38,object,weather - aborted exposures/no dome
+apo,56372,,39,object,weather - aborted exposures/no dome
+apo,56384,,33,object,dither problems - 1.5 pixel shift
+apo,56384,,34,object,dither problems - 1.5 pixel shift
+apo,56384,,35,object,dither problems - 1.5 pixel shift
+apo,56384,,36,object,dither problems - 1.5 pixel shift
+apo,56384,,37,object,dither problems - 1.5 pixel shift
+apo,56384,,38,object,dither problems - 1.5 pixel shift
+apo,56384,,39,object,dither problems - 1.5 pixel shift
+apo,56384,,40,object,dither problems - 1.5 pixel shift
+apo,56399,,118,object,dither problems
+apo,56399,,119,object,dither problems
+apo,56410,,14,object,failed dither moves - image did not move forward far enough
+apo,56410,,15,object,failed dither moves - image did not move back far enough (net move ~0.2 pixels left)
+apo,56432,,81,internal_flat,b chip failed to archive - removed
+apo,56557,5560,52,object,problems with dither sequence - 2A frames in a row
+apo,56557,5560,53,object,problems with dither sequence - second image aborted
+apo,56557,5560,48,object,failed reduction - possibly related to failed dither
+apo,56557,5560,49,object,failed reduction - possibly related to failed dither
+apo,56557,5560,50,object,failed reduction - possibly related to failed dither
+apo,56557,5560,51,object,failed reduction - possibly related to failed dither
+apo,56557,5560,54,dome_flat,failed reduction - possibly related to failed dither
+apo,56560,7125,22,object,failed reduction
+apo,56560,7125,23,object,failed reduction
+apo,56560,7125,24,object,failed reduction
+apo,56560,7125,25,object,failed reduction
+apo,56560,7125,26,object,failed reduction
+apo,56560,7125,27,object,failed reduction
+apo,56560,7125,28,object,failed reduction
+apo,56560,7125,29,object,failed reduction
+apo,56560,7125,30,dome_flat,failed reduction
+apo,56566,6083,11,object,failed reduction
+apo,56566,6083,12,object,failed reduction
+apo,56566,6083,13,object,failed reduction
+apo,56566,6083,14,object,failed reduction
+apo,56566,6083,15,object,failed reduction
+apo,56566,6083,16,object,failed reduction
+apo,56566,6083,17,object,failed reduction
+apo,56566,6083,18,object,failed reduction
+apo,56566,6083,19,dome_flat,failed reduction
+apo,56574,,27,object,image 28 (B) aborted
+apo,56574,,28,object,aborted
+apo,56578,6084,13,object,failed reduction
+apo,56578,6084,14,sky_flat,failed reduction
+apo,56578,6084,15,sky_flat,failed reduction
+apo,56578,6084,16,sky_flat,failed reduction
+apo,56578,6084,17,sky_flat,failed reduction
+apo,56578,6084,18,sky_flat,failed reduction
+apo,56578,6084,19,sky_flat,failed reduction
+apo,56578,6084,20,sky_flat,failed reduction
+apo,56578,6084,21,sky_flat,failed reduction
+apo,56578,6084,22,sky_flat,failed reduction
+apo,56578,6084,23,sky_flat,failed reduction
+apo,56578,6084,24,sky_flat,failed reduction
+apo,56578,6084,25,dome_flat,failed reduction
+apo,56696,5570,35,object,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,36,object,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,37,object,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,38,object,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,39,object,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,40,object,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,41,object,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,42,object,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,47,dome_flat,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,48,dome_flat,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,49,dome_flat,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,50,dome_flat,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56696,5570,51,dome_flat,plate observed twice - gang connector unplugged/replugged - use first dome flat for both sets
+apo,56698,7348,59,object,failed reduction
+apo,56698,7348,60,object,failed reduction
+apo,56698,7348,61,object,failed reduction
+apo,56698,7348,62,object,failed reduction
+apo,56698,7348,63,object,failed reduction
+apo,56698,7348,64,object,failed reduction
+apo,56698,7348,65,object,failed reduction
+apo,56698,7348,66,object,failed reduction
+apo,56698,7348,67,object,failed reduction
+apo,56698,7348,68,object,failed reduction
+apo,56698,7348,69,object,failed reduction
+apo,56698,7348,70,object,failed reduction
+apo,56698,7348,71,dome_flat,failed reduction
+apo,56699,7200,11,object,data problems - bad checksums - cannot uncompress files
+apo,56699,7200,12,object,data problems - bad checksums - cannot uncompress files
+apo,56699,7200,13,object,data problems - bad checksums - cannot uncompress files
+apo,56699,7200,14,object,data problems - bad checksums - cannot uncompress files
+apo,56699,7200,15,dome_flat,data problems - bad checksums - cannot uncompress files
+apo,56699,5691,20,object,data problems - bad checksums - cannot uncompress files
+apo,56699,5691,21,object,data problems - bad checksums - cannot uncompress files
+apo,56699,5691,22,object,data problems - bad checksums - cannot uncompress files
+apo,56699,5691,23,object,data problems - bad checksums - cannot uncompress files
+apo,56699,5691,24,object,data problems - bad checksums - cannot uncompress files
+apo,56699,5691,25,object,data problems - bad checksums - cannot uncompress files
+apo,56699,5691,26,object,data problems - bad checksums - cannot uncompress files
+apo,56699,5691,27,object,data problems - bad checksums - cannot uncompress files
+apo,56699,5691,28,dome_flat,data problems - bad checksums - cannot uncompress files
+apo,56699,6766,31,object,data problems - bad checksums - cannot uncompress files
+apo,56699,6766,32,object,data problems - bad checksums - cannot uncompress files
+apo,56699,6766,33,object,data problems - bad checksums - cannot uncompress files
+apo,56699,6766,34,object,data problems - bad checksums - cannot uncompress files
+apo,56699,6766,35,object,data problems - bad checksums - cannot uncompress files
+apo,56699,6766,36,object,data problems - bad checksums - cannot uncompress files
+apo,56699,6766,37,object,data problems - bad checksums - cannot uncompress files
+apo,56699,6766,38,object,data problems - bad checksums - cannot uncompress files
+apo,56699,6766,39,object,data problems - bad checksums - cannot uncompress files
+apo,56699,6766,40,object,data problems - bad checksums - cannot uncompress files
+apo,56699,6766,41,dome_flat,data problems - bad checksums - cannot uncompress files
+apo,56701,5673,88,object,petals not closed for dome flat - use flat from previous plate/cartridge
+apo,56701,5673,89,object,petals not closed for dome flat - use flat from previous plate/cartridge
+apo,56701,5673,90,object,petals not closed for dome flat - use flat from previous plate/cartridge
+apo,56701,5673,91,object,petals not closed for dome flat - use flat from previous plate/cartridge
+apo,56701,5673,92,object,petals not closed for dome flat - use flat from previous plate/cartridge
+apo,56701,5673,93,object,petals not closed for dome flat - use flat from previous plate/cartridge
+apo,56701,5673,94,object,petals not closed for dome flat - use flat from previous plate/cartridge
+apo,56701,5673,95,object,petals not closed for dome flat - use flat from previous plate/cartridge
+apo,56701,5673,96,object,petals not closed for dome flat - use flat from previous plate/cartridge
+apo,56701,5673,97,object,petals not closed for dome flat - use flat from previous plate/cartridge
+apo,56701,5673,98,dome_flat,petals not closed for dome flat - use flat from previous plate/cartridge
+apo,56726,7201,9,object,first 2 images bad exposures
+apo,56726,7201,10,object,first 2 images bad exposures
+apo,56726,7201,11,dark,3rd+4th images are darks
+apo,56726,7201,12,dark,3rd+4th images are darks
+apo,56749,7463,92,object,failed reduction
+apo,56749,7463,93,object,failed reduction
+apo,56749,7463,94,object,failed reduction
+apo,56749,7463,95,object,failed reduction
+apo,56749,7463,96,object,failed reduction
+apo,56749,7463,97,object,failed reduction
+apo,56749,7463,98,object,failed reduction
+apo,56749,7463,99,object,failed reduction
+apo,56749,7463,100,dome_flat,failed reduction
+apo,56754,7463,21,object,failed reduction
+apo,56754,7463,22,object,failed reduction
+apo,56754,7463,23,object,failed reduction
+apo,56754,7463,24,object,failed reduction
+apo,56754,7463,25,object,failed reduction
+apo,56754,7463,26,object,failed reduction
+apo,56754,7463,27,object,failed reduction
+apo,56754,7463,28,object,failed reduction
+apo,56754,7463,29,object,failed reduction
+apo,56754,7463,30,object,failed reduction
+apo,56754,7463,31,dome_flat,failed reduction
+apo,56783,7440,13,object,apogee-ql not archiving images - had to restart - first 2 exposures lost/aborted
+apo,56783,7440,14,object,apogee-ql not archiving images - had to restart - first 2 exposures lost/aborted
+apo,57390,8051,18,object,FF petals turned on at end of science exposure - flat taken like dark - removed science frame and used 03 for flat
+apo,57390,8051,19,dome_flat,FF petals turned on at end of science exposure - flat taken like dark - removed science frame and used 03 for flat
+apo,57412,8794,38,object,FF petals turned on at end of science exposure - flat taken like dark - removed science frame and used 50 for flat
+apo,57412,8794,39,dome_flat,FF petals turned on at end of science exposure - flat taken like dark - removed science frame and used 50 for flat
+apo,57316,0000,12,quartz_flat,no signal
+apo,57316,0000,13,quartz_flat,no signal
+apo,57316,0000,14,quartz_flat,no signal
+apo,57316,0000,15,quartz_flat,no signal
+apo,57316,0000,16,quartz_flat,no signal
+apo,57316,0000,17,quartz_flat,no signal
+apo,57316,0000,18,quartz_flat,no signal
+apo,57346,0000,72,quartz_flat,no signal
+apo,57346,0000,73,quartz_flat,no signal
+apo,57346,0000,74,quartz_flat,no signal
+apo,57346,0000,75,quartz_flat,no signal
+apo,57346,0000,76,quartz_flat,no signal
+apo,57346,0000,77,quartz_flat,no signal
+apo,57346,0000,78,quartz_flat,no signal
+apo,57399,0000,52,quartz_flat,no signal
+apo,57399,0000,53,quartz_flat,no signal
+apo,57399,0000,54,quartz_flat,no signal
+apo,57399,0000,55,quartz_flat,no signal
+apo,57399,0000,56,quartz_flat,no signal
+apo,57399,0000,57,quartz_flat,no signal
+apo,57399,0000,58,quartz_flat,no signal
+apo,57404,0000,71,quartz_flat,no signal
+apo,57404,0000,72,quartz_flat,no signal
+apo,57404,0000,73,quartz_flat,no signal
+apo,57404,0000,74,quartz_flat,no signal
+apo,57404,0000,75,quartz_flat,no signal
+apo,57404,0000,76,quartz_flat,no signal
+apo,57404,0000,77,quartz_flat,no signal
+apo,57512,0000,75,quartz_flat,no signal
+apo,57512,0000,76,quartz_flat,no signal
+apo,57512,0000,77,quartz_flat,no signal
+apo,57512,0000,78,quartz_flat,no signal
+apo,57512,0000,79,quartz_flat,no signal
+apo,57512,0000,80,quartz_flat,no signal
+apo,57512,0000,81,quartz_flat,no signal
+apo,57492,8990,70,dome_flat,no signal on flat - use frame 47
+apo,57681,9244,42,object,aborted exposure
+apo,57818,9034,28,object,exposures taken during very cloudy conditions - no good
+apo,57818,9034,29,object,exposures taken during very cloudy conditions - no good
+apo,57913,9980,,,no dome flat for plate 9980 - used cal channel
+apo,58013,8657,,,no dome flat taken - used quartzflat 24510052
+apo,58036,9250,29,object,plate not actually plugged
+apo,58036,9250,30,object,plate not actually plugged
+apo,58036,9250,31,object,plate not actually plugged
+apo,58036,9250,32,object,plate not actually plugged
+apo,58036,9250,33,object,plate not actually plugged
+apo,58036,9250,34,object,plate not actually plugged
+apo,58036,9250,35,object,plate not actually plugged
+apo,58036,9250,36,object,plate not actually plugged
+apo,58036,9250,37,flat,plate not actually plugged
+apo,58301,7561,54,object,plate observed through thick clouds
+apo,58301,7561,55,object,plate observed through thick clouds
+apo,58388,10350,8,object,test exposures - do not use
+apo,58388,10350,9,object,test exposures - do not use
+apo,58388,10350,10,object,test exposures - do not use
+apo,58388,10350,11,object,test exposures - do not use
+apo,58388,10350,12,object,test exposures - do not use
+apo,58444,11229,01,unknown,test exposures
+apo,58444,11229,02,unknown,test exposures
+apo,58444,11229,03,unknown,test exposures
+apo,58444,11229,04,unknown,test exposures
+apo,58444,11229,05,unknown,test exposures
+apo,58444,11229,06,unknown,test exposures
+apo,58444,11229,07,unknown,test exposures
+apo,58444,11229,08,unknown,test exposures
+apo,58444,11229,09,unknown,test exposures
+apo,58444,11229,10,unknown,test exposures
+apo,58444,11229,11,unknown,test exposures
+apo,58444,11229,12,unknown,test exposures
+apo,58444,11229,13,unknown,test exposures
+apo,58444,11229,14,unknown,test exposures
+apo,58444,11229,15,unknown,test exposures
+apo,58444,11229,16,unknown,test exposures
+apo,58499,11603,45,object,low counts - observed through clouds
+apo,58499,11592,31,object,low counts - observed through clouds
+apo,58499,11592,32,object,low counts - observed through clouds
+apo,58499,11592,36,object,low counts - observed through clouds
+apo,58501,11486,65,object,plate observed through thick clouds
+apo,58501,11486,66,object,plate observed through thick clouds
+apo,58501,11486,67,object,plate observed through thick clouds
+apo,58501,11486,68,object,plate observed through thick clouds
+apo,58566,11142,82,object,plate observed through thick clouds
+apo,58566,11142,83,object,plate observed through thick clouds
+apo,58566,11142,84,object,plate observed through thick clouds
+apo,58566,11142,85,object,plate observed through thick clouds
+apo,58566,11142,86,object,plate observed through thick clouds
+apo,58566,11142,87,object,plate observed through thick clouds
+apo,58567,11640,56,object,aborted exposure
+apo,58567,11771,73,object,aborted exposure
+apo,58631,11415,70,object,stuck dither mechanism - no dither pairs
+apo,58631,11415,71,object,stuck dither mechanism - no dither pairs
+apo,58631,11260,63,object,stuck dither mechanism - no dither pairs
+apo,58631,11260,64,object,stuck dither mechanism - no dither pairs
+apo,58631,11260,65,object,stuck dither mechanism - no dither pairs
+apo,58631,11260,66,object,stuck dither mechanism - no dither pairs
+apo,58634,7961,60,object,aborted exposure due to humidity
+apo,58733,11213,64,dome_flat,obs log says ignore this one - used frame 61 instead
+apo,58733,11268,11,object,technical issues - exposure hung midway through integration - severed connection
+apo,58765,10224,54,object,observed through clouds - no dither pairs
+apo,58765,10224,55,object,observed through clouds - no dither pairs
+apo,58765,10224,56,object,observed through clouds - no dither pairs
+apo,58765,10224,57,object,observed through clouds - no dither pairs
+apo,58765,10224,58,object,observed through clouds - no dither pairs
+apo,58765,10224,59,object,observed through clouds - no dither pairs
+apo,58765,10224,60,object,observed through clouds - no dither pairs
+apo,58765,10224,61,object,observed through clouds - no dither pairs
+apo,58765,10224,62,object,observed through clouds - no dither pairs
+apo,58765,10224,63,object,observed through clouds - no dither pairs
+apo,58765,10224,64,object,observed through clouds - no dither pairs
+apo,58765,10224,65,object,observed through clouds - no dither pairs
+apo,58789,7965,22,object,exposure aborted because plate was complete
+apo,58789,12079,48,object,exposure aborted because plate was complete
+apo,58793,12030,74,calibration,cal shutter failed to open - everything is a dark
+apo,58793,12030,75,calibration,cal shutter failed to open - everything is a dark
+apo,58793,12030,76,calibration,cal shutter failed to open - everything is a dark
+apo,58793,12030,77,calibration,cal shutter failed to open - everything is a dark
+apo,58793,12030,78,calibration,cal shutter failed to open - everything is a dark
+apo,58793,12030,79,calibration,cal shutter failed to open - everything is a dark
+apo,58793,12030,80,calibration,cal shutter failed to open - everything is a dark
+apo,58793,12030,81,calibration,cal shutter failed to open - everything is a dark
+apo,58793,12030,82,calibration,cal shutter failed to open - everything is a dark
+apo,58793,12030,83,calibration,cal shutter failed to open - everything is a dark
+apo,58793,12030,84,calibration,cal shutter failed to open - everything is a dark
+apo,58900,11958,74,object,no dither pairs - stuck mechanism
+apo,58900,11958,75,object,no dither pairs - stuck mechanism
+apo,58900,11958,76,object,no dither pairs - stuck mechanism
+apo,58900,11958,77,object,no dither pairs - stuck mechanism
+apo,58900,11958,78,object,no dither pairs - stuck mechanism
+apo,58900,11958,79,object,no dither pairs - stuck mechanism
+apo,58929,11970,56,quartz_flat,no peaks found - low counts
+apo,58929,11970,57,quartz_flat,no peaks found - low counts
+apo,58929,11970,58,quartz_flat,no peaks found - low counts
+apo,59059,12684,24,dark,gang connector not connected
+apo,59060,11424,68,object,no dither pairs - stuck mechanism
+apo,59060,11424,69,object,no dither pairs - stuck mechanism
+apo,59073,11759,55,object,no dither pairs - stuck mechanism
+apo,59073,11759,56,object,no dither pairs - stuck mechanism
+apo,59073,11759,57,object,no dither pairs - stuck mechanism
+apo,59073,11759,58,object,no dither pairs - stuck mechanism
+apo,59075,11425,11,object,clouds - low signal
+apo,59075,11425,12,object,clouds - low signal
+apo,59078,12696,64,object,no dither pairs - stuck mechanism
+apo,59078,12696,65,object,no dither pairs - stuck mechanism
+apo,59078,12696,66,object,no dither pairs - stuck mechanism
+apo,59078,12696,67,object,no dither pairs - stuck mechanism
+apo,59078,12696,68,object,no dither pairs - stuck mechanism
+apo,59078,12696,69,object,no dither pairs - stuck mechanism
+apo,59078,12696,70,object,no dither pairs - stuck mechanism
+apo,59078,12696,71,object,no dither pairs - stuck mechanism
+apo,59078,9483,75,object,no dither pairs - stuck mechanism
+apo,59078,9483,76,object,no dither pairs - stuck mechanism
+lco,57852,9715,37,dome_flat,no signal - use flat 52
+lco,57918,9818,45,science,frames taken with dome closed
+lco,57918,9818,46,science,frames taken with dome closed
+lco,57918,9818,47,science,frames taken with dome closed
+lco,57918,9818,48,science,frames taken with dome closed
+lco,57918,9818,49,science,frames taken with dome closed
+lco,57918,9818,50,science,frames taken with dome closed
+lco,57918,9818,51,science,frames taken with dome closed
+lco,57918,9818,52,science,frames taken with dome closed
+lco,57940,9715,20,science,low signal - crashed reduction on telluric step
+lco,57943,9701,12,science,observer: moved the thread ring too far
+lco,57943,9701,13,science,observer: moved the thread ring too far
+lco,57946,9914,16,science,dome light turned on during exposure
+lco,57968,9633,27,object,frame was taken and associated to this plate in error
+lco,57973,9856,81,sky_flat,grouped with science exposures - removed
+lco,57974,9816,67,sky_flat,grouped with science exposures - removed
+lco,57975,9819,17,science,plate observed in poor conditions - crashed the telluric phase
+lco,58116,10111,09,dome_flat,low signal - use flat 16
+lco,58322,9847,12,object,poor signal from clouds
+lco,58322,9847,13,object,poor signal from clouds
+lco,58322,9847,14,object,poor signal from clouds
+lco,58322,9847,15,object,poor signal from clouds
+lco,58322,9847,16,object,poor signal from clouds
+lco,58322,9847,17,object,poor signal from clouds
+lco,58322,9847,18,object,poor signal from clouds
+lco,58322,9839,22,object,poor signal from clouds
+lco,58322,9839,23,object,poor signal from clouds
+lco,58348,10124,48,object,aborted exposure - low signal - no dither pair
+lco,58352,10138,60,object,multiple problems (see obs log) - not usable
+lco,58352,10138,61,object,multiple problems (see obs log) - not usable
+lco,58352,10138,62,object,multiple problems (see obs log) - not usable
+lco,58386,10134,37,object,low signal due to weather
+lco,58386,10134,38,object,low signal due to weather
+lco,58387,11157,30,object,exposures aborted due to weather
+lco,58387,11157,31,object,exposures aborted due to weather
+lco,58505,10181,92,dome_flat,low signal - use flat 62
+lco,58622,10577,68,object,69 underexposed due to weather - 68 is the only other dither pair
+lco,58622,10577,69,object,underexposed due to weather - 68 is the only other dither pair
+lco,58684,11156,73,dome_flat,erroneous dome flat due to human error
+lco,58685,11893,78,object,low signal due to weather
+lco,58685,11893,79,object,low signal due to weather
+lco,58768,11907,63,object,aborted due to clouds
+lco,58768,11907,64,object,aborted due to clouds
+lco,58775,11806,12,object,failed exposures due to technical problems with the apogee actor
+lco,58775,11806,13,object,failed exposures due to technical problems with the apogee actor
+lco,58858,12198,09,object,restarted exposure - bad
+lco,59159,12740,26,object,aborted due to clouds
+lco,59159,12740,27,object,aborted due to clouds
+lco,59159,12722,31,object,aborted due to clouds
