@@ -92,7 +92,8 @@ class Exposure(BaseModel):
 
     @model_validator(mode='after')
     def post_model_validation(self):
-        if 'skyflat' in self.observer_comment.lower().replace(' ', ''):
+        sanitised = self.observer_comment.lower().replace(' ', '')
+        if 'skyflat' in sanitised or 'twilight' in sanitised:
             self.image_type = 'twilightflat'
         return self
 
