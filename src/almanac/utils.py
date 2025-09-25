@@ -173,14 +173,12 @@ def rich_display_exposures(
     for col_name in column_names:
         rich_table.add_column(col_name, justify="center")
     
-    # Prepare sequence tracking
-    if sequence_indices is None:
-        all_sequence_indices = []
-    else:
-        all_sequence_indices = np.vstack(
-            [v for v in sequence_indices.values() if len(v) > 0]
-        )
-    
+    # Prepare sequence tracking    
+    all_sequence_indices = []
+    for k, v in (sequence_indices or dict()).items():
+        all_sequence_indices.extend(v)
+    all_sequence_indices = np.array(all_sequence_indices)
+
     sequence_styles_cycle = cycle(sequence_styles)
     in_sequence, current_sequence_style = (False, next(sequence_styles_cycle))
     

@@ -31,6 +31,9 @@ def match_planned_to_plugged(plate_hole_path, plug_map_path, tol=1e-5):
     planned = Table.read(plate_hole_path, format="yanny", tablename="STRUCT1")
     plugged = Table.read(plug_map_path, format="yanny", tablename="PLUGMAPOBJ")
 
+    #planned = planned[planned["holetype"] == "APOGEE"]
+    plugged = plugged[plugged["spectrographId"] == 2]
+
     ra_dist = cdist(
         planned["target_ra"].reshape((-1, 1)),
         plugged["ra"].reshape((-1, 1)),
@@ -43,26 +46,33 @@ def match_planned_to_plugged(plate_hole_path, plug_map_path, tol=1e-5):
     meets_tolerance = (ra_dist < tol) & (dec_dist < tol)
     n_matches_to_plugged_holes = np.sum(meets_tolerance, axis=0)
 
-    has_match = (n_matches_to_plugged_holes == 1)
     N = np.sum(n_matches_to_plugged_holes > 1)
     if N > 0:
         logger.warning(
-            f"{N} plugged holes match multiple planned holes on plate {plate_id}! "
-            f"Following indices are all 1-indexed."
+            f"{N} plugged holes match multiple planned holes!\n"
+            f"\tPlanned holes: {plate_hole_path}\n"
+            f"\tPlugged holes: {plug_map_path}\n"
         )
+        logger.warning(f"Following indices are all 1-indexed.")
         for plugged_index in np.where(n_matches_to_plugged_holes > 1)[0]:
             n = n_matches_to_plugged_holes[plugged_index]
+            logger.warning(
+                f"Plugged hole index {plugged_index + 1} "
+                f"(ra={plugged['ra'][plugged_index]:.5f}, dec={plugged['dec'][plugged_index]:.5f}) "
+                f"matches {n} planned holes within {tol:.1e}:"
+            )
             for i, planned_index in enumerate(np.where(meets_tolerance[:, plugged_index])[0], start=1):
                 logger.warning(
-                    f"Plugged hole index {plugged_index + 1} match {i + 1}/{n} within {tol:.1e} has plugged "
-                    f"coordinates (ra={plugged_holes['ra'][plugged_index]:.5f}, dec={plugged_holes['dec'][plugged_index]:.5f}) "
-                    f"matched to planned coordinates (ra={planned_holes['target_ra'][planned_index]:.5f}, dec={planned_holes['target_dec'][planned_index]:.5f})."
+                    f"\t {i}. Planned hole index {planned_index + 1} matches coordinates (ra={planned['target_ra'][planned_index]:.5f}, dec={planned['target_dec'][planned_index]:.5f})"
                 )
 
+        raise RuntimeError("Cannot uniquely match plugged holes to planned holes!")
+
     dist = np.sqrt(ra_dist**2 + dec_dist**2)
+    has_match = (n_matches_to_plugged_holes == 1)
     planned_hole_indices = np.argmin(dist[:, has_match], axis=0)
 
-    rows = hstack(
+    return hstack(
         [
             plugged[has_match],
             planned[planned_hole_indices]
@@ -71,14 +81,13 @@ def match_planned_to_plugged(plate_hole_path, plug_map_path, tol=1e-5):
         uniq_col_name="{table_name}{col_name}",
         table_names=("", "planned_")
     )
-    return (planned, plugged, rows)
 
 
 def get_headers(path, head=20_000):
     keys = (
-        "DATE-OBS", "FIELDID", "DESIGNID", "CONFIGID", "SEEING", "EXPTYPE",
+        "FIELDID", "DESIGNID", "CONFIGID", "SEEING", "EXPTYPE",
         "NREAD", "IMAGETYP", "LAMPQRTZ", "LAMPTHAR", "LAMPUNE", "FOCUS",
-        "NAME", "PLATEID", "CARTID", "MAPID", "PLATETYP", "OBSCMT",
+        "NAME", "PLATEID", "CARTID", "MAPID", "PLATETYP", "OBSCMNT",
         "COLLPIST", "COLPITCH", "DITHPIX", "TCAMMID", "TLSDETB",
     )
     keys_str = "|".join(keys)
@@ -192,13 +201,6 @@ def target_id_to_designation(target_id: str) -> str:
     target_id = str(target_id.lstrip("-Jdb_"))
     return target_id
 
-
-def get_plugMapP_path(plate_id: int) -> str:
-    plate_id = int(plate_id)
-    # TODO: why does the plugmap path use n digits instead of 6 like plateHole?
-    path = f"{config.platelist_dir}/{str(plate_id)[:-2].zfill(4)}XX/{plate_id:0>6.0f}/plPlugMapP-{plate_id:.0f}.par"
-    logger.debug(f"PlugMap path: {path}")
-    return path
 
 
 def get_exposure_metadata(observatory: str, mjd: int, **kwargs) -> Generator[Dict[str, Any], None, None]:

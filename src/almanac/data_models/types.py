@@ -5,38 +5,48 @@ Prefix = Literal["apR", "asR"]
 Chip = Literal["a", "b", "c"]
 
 ImageType = Literal[
-    "Blackbody",
-    "Dark",
-    "Object",
-    "DomeFlat",
-    "ArcLamp",
-    "InternalFlat",
-    "QuartzFlat",
-    "Missing"
+    "blackbody",
+    "dark",
+    "object",
+    "domeflat",
+    "arclamp",
+    "twilightflat",
+    "internalflat",
+    "quartzflat",
+    "missing"
 ]
-TargetType = Literal["NA", "science", "sky", "standard"]
+Category = Literal[
+    "",
+    "science",
+    "sky_apogee",
+    "sky_boss",
+    "standard_apogee",
+    "standard_boss",
+    "open_fiber"
+]
 
 HoleType = Literal[
-    "OBJECT",
-    "COHERENT_SKY",
-    "GUIDE",
-    "LIGHT_TRAP",
-    "ALIGNMENT",
-    "QUALITY",
-    "MANGA",
-    "MANGA_SINGLE",
-    "MANGA_ALIGNMENT",
-    "ACQUISITION_CENTER",
-    "ACQUISITION_OFFAXIS",
-    "APOGEE",
-    "CENTER",
-    "TRAP",
-    "BOSS",
-    "APOGEE_SHARED",
-    "APOGEE_SOUTH",
-    "BOSSHALF",
-    "BOSS_SHARED"
+    "object",
+    "coherent_sky",
+    "guide",
+    "light_trap",
+    "alignment",
+    "quality",
+    "manga",
+    "manga_single",
+    "manga_alignment",
+    "acquisition_center",
+    "acquisition_offaxis",
+    "apogee",
+    "center",
+    "trap",
+    "boss",
+    "apogee_shared",
+    "apogee_south",
+    "bosshalf",
+    "boss_shared"
 ]
+
 ObjType = Literal[
     "GALAXY",
     "QSO",

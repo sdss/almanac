@@ -1,7 +1,6 @@
 import os
 import numpy as np
 from astropy.table import Table
-from datetime import datetime
 from functools import partial, cached_property
 from pydantic import BaseModel, Field, computed_field, validator
 from typing import Optional, Tuple, Literal
@@ -22,7 +21,7 @@ class Exposure(BaseModel):
 
     #> Basic Information
     mjd: int = Field(description="MJD of the exposure", ge=57_600)
-    exposure: int = Field(description="Exposure number", gt=0)
+    exposure: int = Field(description="Exposure number", ge=1)
     observatory: Observatory = Field(description="Observatory name")
     prefix: Prefix = Field(description="Raw exposure basename prefix")
 
@@ -36,8 +35,7 @@ class Exposure(BaseModel):
     )
     n_read: int = Field(default=0, alias="nread", ge=0)
     image_type: ImageType = Field(default=None, alias="imagetyp")
-    date_obs: datetime = Field(alias="date-obs")
-    observer_comment: Optional[str] = Field(default="")
+    observer_comment: Optional[str] = Field(default="", alias="obscmnt")
 
     #> Identifiers
     map_id: int = Field(default=-1, alias="mapid")
@@ -55,57 +53,48 @@ class Exposure(BaseModel):
     collpist: float = Field(default=float('NaN'))
     colpitch: float = Field(default=float('NaN'))
     dithpix: float = Field(default=float('NaN'))
-    lamp_quartz: bool = Field(default=False, alias="lampqrtz")
-    lamp_thar: bool = Field(default=False, alias="lampthar")
-    lamp_une: bool = Field(default=False, alias="lampune")
+    lamp_quartz: int = Field(default=-1, alias="lampqrtz", ge=-1, le=1)
+    lamp_thar: int = Field(default=-1, alias="lampthar", ge=-1, le=1)
+    lamp_une: int = Field(default=-1, alias="lampune", ge=-1, le=1)
 
     _targets: Optional[Tuple[Target]] = None
 
+    @computed_field(description="Exposure string used in path")
+    def exposure_string(self) -> str:
+        return get_exposure_string(self.mjd, self.exposure)
+
     @computed_field(description="Whether this exposure is from the FPS era")
     def fps(self) -> bool:
-        return (self.mjd >= 59550)
+        start = dict(apo=59423, lco=59810)[self.observatory]
+        return self.mjd >= start
+
+    #@computed_field(description="FPI")
+    #def fpi(self) -> bool:
+    #    return "fpi" in self.observer_comment.lower()
+
+    #@computed_field(description="Sparse pak mode")
+    #def sparse_pak(self) -> bool:
+    #    return "sparse" in self.observer_comment.lower()
 
     @computed_field
-    @property
-    def plugged_mjd(self) -> int:
-        try:
-            return int(self.name.split("-")[1])
-        except:
-            return -1
-
-    @computed_field
-    @property
-    def plugged_iteration(self) -> str:
-        try:
-            return self.name.split("-")[2]
-        except:
-            return ""
-
-    @computed_field
-    @property
-    def chip_flags(self) -> int:
-        return int(np.sum(2**np.where(list(map(os.path.exists, self.paths)))[0]))
-
-    @computed_field
-    @property
     def flagged_bad(self) -> bool:
         return (self.observatory, self.mjd, self.exposure) in lookup_bad_exposures
 
-    # TODO: we may want to change this to be way more descriptive, particularly
-    #       when we start doing QA to make sure exposures look like they should
-    @property
-    def qa_metadata(self) -> Optional[dict]:
-        print("Warning: The `qa_metadata` property will change in the future")
-        return lookup_bad_exposures.get((self.observatory, self.mjd, self.exposure), None)
-
-    class Config:
-        validate_by_name = True
-        validate_assignment = True
-
-    def __repr__(self):
-        return f"{self.__repr_name__()}(exposure={self.exposure}, observatory={self.observatory}, mjd={self.mjd})"
+    @computed_field
+    def chip_flags(self) -> int:
+        return int(np.sum(2**np.where(list(map(os.path.exists, self.paths)))[0]))
 
     # Validations
+
+    @validator('image_type', pre=True)
+    def validate_descriptive_type(cls, v):
+        return v.lower()
+
+    @model_validator(mode='after')
+    def post_model_validation(self):
+        if 'skyflat' in self.observer_comment.lower().replace(' ', ''):
+            self.image_type = 'twilightflat'
+        return self
 
     @validator('cart_id', pre=True)
     def validate_cart_id(cls, v):
@@ -115,7 +104,7 @@ class Exposure(BaseModel):
 
     @validator('map_id', 'plate_id', 'field_id', 'design_id', 'config_id', pre=True)
     def validate_identifiers(cls, v):
-        return empty_string_to_int(v, -999)
+        return empty_string_to_int(v, -1)
 
     @validator('seeing', 'focus', 'collpist', 'colpitch', 'dithpix', pre=True)
     def validate_floats(cls, v):
@@ -126,9 +115,29 @@ class Exposure(BaseModel):
 
     @validator('lamp_quartz', 'lamp_thar', 'lamp_une', pre=True)
     def validate_lamps(cls, v):
-        return {'F': False, 'T': True}.get(str(v).strip().upper(), False)
+        return {'F': 0, 'T': 1}.get(str(v).strip().upper(), -1)
 
-    @computed_field
+    # TODO: we may want to change this to be way more descriptive, particularly
+    #       when we start doing QA to make sure exposures look like they should
+    @property
+    def qa_metadata(self) -> Optional[dict]:
+        print("Warning: The `qa_metadata` property will change in the future")
+        return lookup_bad_exposures.get((self.observatory, self.mjd, self.exposure), None)
+
+    @property
+    def plugged_mjd(self) -> int:
+        try:
+            return int(self.name.split("-")[1])
+        except:
+            return -1
+
+    @property
+    def plugged_iteration(self) -> str:
+        try:
+            return self.name.split("-")[2]
+        except:
+            return ""
+
     @property
     def paths(self) -> Tuple[str]:
         return tuple(map(partial(get_exposure_path, self.observatory, self.mjd, self.prefix, self.exposure), "abc"))
@@ -252,23 +261,43 @@ class Exposure(BaseModel):
     @cached_property
     def targets(self) -> Tuple[Target]:
         if self._targets is None:
-            factory = FPSTarget if self.fps else PlateTarget
+            if (
+                (self.image_type == "object")
+            &   (
+                    (self.fps and self.config_id > 0)
+                |   (not self.fps and self.plate_id > 0)
+            )
+            ):
+                if self.fps:
+                    factory = FPSTarget
 
-            if self.fps and self.config_id > 0:
-                targets = Table.read(
-                    self.config_summary_path,
-                    format="yanny",
-                    tablename="FIBERMAP"
-                )
-            elif not self.fps and self.plate_id > 0:
-                planned, plugged, targets = match_planned_to_plugged(
-                    self.plate_hole_path,
-                    self.plug_map_path
-                )
+                    # TODO: perhaps we should move this logic elsewhere, as it is
+                    #       getting a bit unwieldy
+                    targets = Table.read(
+                        self.config_summary_path,
+                        format="yanny",
+                        tablename="FIBERMAP"
+                    )
+                    keep = (targets["fiberType"] == "APOGEE") & (targets["fiberId"] > 0)
+                    targets = targets[keep]
+                else:
+                    factory = PlateTarget
+                    targets = match_planned_to_plugged(
+                        self.plate_hole_path,
+                        self.plug_map_path
+                    )
+                self._targets = tuple([factory(**r) for r in targets])
             else:
-                targets = []
-            self._targets = tuple([factory(**r) for r in targets])
+                self._targets = tuple()
         return self._targets
+
+    def __repr__(self):
+        return f"{self.__repr_name__()}(observatory={self.observatory}, mjd={self.mjd}, exposure={self.exposure}, image_type={self.image_type})"
+
+    class Config:
+        frozen = True
+        validate_by_name = True
+        validate_assignment = True
 
 
 def empty_string_to_int(v, default) -> int:
@@ -283,7 +312,10 @@ def get_exposure_path(observatory, mjd, prefix, exposure, chip):
         f"{config.apogee_dir}/"
         f"{observatory}/"
         f"{mjd}/"
-        f"{prefix}-{chip}-{mjd_to_exposure_prefix(mjd) + exposure:08d}.apz"
+        f"{prefix}-{chip}-{get_exposure_string(mjd, exposure)}.apz"
     )
 
-mjd_to_exposure_prefix = lambda mjd: (int(mjd) - 55_562) * 10_000
+mjd_to_exposure_prefix = lambda mjd: max(0, (int(mjd) - 55_562) * 10_000)
+
+def get_exposure_string(mjd, exposure):
+    return f"{mjd_to_exposure_prefix(mjd) + exposure:08d}"
