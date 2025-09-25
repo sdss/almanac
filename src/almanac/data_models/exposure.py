@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from astropy.table import Table
 from datetime import datetime
 from functools import partial, cached_property
@@ -13,6 +14,9 @@ from almanac.data_models.types import *
 from almanac.data_models.target import Target
 from almanac.data_models.fps import FPSTarget
 from almanac.data_models.plate import PlateTarget
+
+from almanac.qa import lookup_bad_exposures
+
 
 class Exposure(BaseModel):
 
@@ -82,6 +86,18 @@ class Exposure(BaseModel):
     def chip_flags(self) -> int:
         return int(np.sum(2**np.where(list(map(os.path.exists, self.paths)))[0]))
 
+    @computed_field
+    @property
+    def flagged_bad(self) -> bool:
+        return (self.observatory, self.mjd, self.exposure) in lookup_bad_exposures
+
+    # TODO: we may want to change this to be way more descriptive, particularly
+    #       when we start doing QA to make sure exposures look like they should
+    @property
+    def qa_metadata(self) -> Optional[dict]:
+        print("Warning: The `qa_metadata` property will change in the future")
+        return lookup_bad_exposures.get((self.observatory, self.mjd, self.exposure), None)
+
     class Config:
         validate_by_name = True
         validate_assignment = True
@@ -107,6 +123,10 @@ class Exposure(BaseModel):
             return float(v)
         except:
             return float('NaN')
+
+    @validator('lamp_quartz', 'lamp_thar', 'lamp_une', pre=True)
+    def validate_lamps(cls, v):
+        return {'F': False, 'T': True}.get(str(v).strip().upper(), False)
 
     @computed_field
     @property
@@ -232,19 +252,21 @@ class Exposure(BaseModel):
     @cached_property
     def targets(self) -> Tuple[Target]:
         if self._targets is None:
-            if self.fps:
-                factory = FPSTarget
+            factory = FPSTarget if self.fps else PlateTarget
+
+            if self.fps and self.config_id > 0:
                 targets = Table.read(
                     self.config_summary_path,
                     format="yanny",
                     tablename="FIBERMAP"
                 )
-            else:
-                factory = PlateTarget
+            elif not self.fps and self.plate_id > 0:
                 planned, plugged, targets = match_planned_to_plugged(
                     self.plate_hole_path,
                     self.plug_map_path
                 )
+            else:
+                targets = []
             self._targets = tuple([factory(**r) for r in targets])
         return self._targets
 

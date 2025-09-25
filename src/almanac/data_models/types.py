@@ -4,10 +4,19 @@ Observatory = Literal["apo", "lco"]
 Prefix = Literal["apR", "asR"]
 Chip = Literal["a", "b", "c"]
 
-ImageType = Literal["Dark", "Object", "DomeFlat", "ArcLamp", "InternalFlat", "QuartzFlat"]
+ImageType = Literal[
+    "Blackbody",
+    "Dark",
+    "Object",
+    "DomeFlat",
+    "ArcLamp",
+    "InternalFlat",
+    "QuartzFlat",
+    "Missing"
+]
 TargetType = Literal["NA", "science", "sky", "standard"]
 
-PluggedHoleType = Literal[
+HoleType = Literal[
     "OBJECT",
     "COHERENT_SKY",
     "GUIDE",
@@ -19,13 +28,14 @@ PluggedHoleType = Literal[
     "MANGA_ALIGNMENT",
     "ACQUISITION_CENTER",
     "ACQUISITION_OFFAXIS",
-]
-PlannedHoleType = Literal[
-    "ALIGNMENT",
     "APOGEE",
     "CENTER",
-    "GUIDE",
-    "TRAP"
+    "TRAP",
+    "BOSS",
+    "APOGEE_SHARED",
+    "APOGEE_SOUTH",
+    "BOSSHALF",
+    "BOSS_SHARED"
 ]
 ObjType = Literal[
     "GALAXY",
