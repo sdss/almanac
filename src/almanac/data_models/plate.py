@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, Field, validator, model_validator
+from pydantic import BaseModel, Field, validator, model_validator, computed_field
 
 from almanac.data_models.types import *
 
@@ -60,6 +60,16 @@ class PlateTarget(BaseModel):
     diameter: float = Field(description="Diameter")
     buffer: float = Field(description="Buffer size")
     priority: int = Field(description="Target priority")
+
+    @computed_field
+    def twomass_designation(self) -> str:
+        """ Convert a target ID to a standardized designation format. """
+        # The target_ids seem to be styled '2MASS-J...'
+        target_id = self.target_ids.strip()
+        target_id = target_id[5:] if target_id.startswith("2MASS") else target_id
+        target_id = str(target_id.lstrip("-Jdb_"))
+        return target_id
+
 
     @validator('hole_type', 'planned_hole_type', 'obj_type', pre=True)
     def enforce_lower_case(cls, v):

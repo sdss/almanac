@@ -22,9 +22,9 @@ from almanac.qa import lookup_bad_exposures
 class Exposure(BaseModel):
 
     #> Basic Information
-    mjd: int = Field(description="MJD of the exposure", ge=57_600)
-    exposure: int = Field(description="Exposure number", ge=1)
     observatory: Observatory = Field(description="Observatory name")
+    mjd: int = Field(description="MJD of the exposure")
+    exposure: int = Field(description="Exposure number", ge=1)
     prefix: Optional[Prefix] = Field(description="Raw exposure basename prefix", default=None)
 
     #> Exposure Information

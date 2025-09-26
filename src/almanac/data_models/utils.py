@@ -191,20 +191,3 @@ def input_id_to_designation(input_id: str) -> Tuple[str, str]:
             return ("Unknown", input_id)
         else:
             return ("catalog", cleaned)
-
-
-def target_id_to_designation(target_id: str) -> str:
-    """
-    Convert a target ID to a standardized designation format.
-
-    :param target_id:
-        The target ID string, typically in format like '2MASS-J...' or similar.
-
-    :returns:
-        Cleaned designation string with prefixes removed.
-    """
-    # The target_ids seem to be styled '2MASS-J...'
-    target_id = target_id.strip()
-    target_id = target_id[5:] if target_id.startswith("2MASS") else target_id
-    target_id = str(target_id.lstrip("-Jdb_"))
-    return target_id
