@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import traceback
 from glob import glob
 from subprocess import check_output
 from astropy.table import Table, hstack, unique
@@ -187,6 +188,15 @@ def get_science_sequences(exposures: List[Exposure]) -> List[Tuple[int, int]]:
     return get_sequences(exposures, "object", ("field_id", "plate_id", "config_id", "image_type"))
 
 
+def _safe_get_almanac_data(observatory, mjd, fibers, meta):
+    try:
+        return get_almanac_data(observatory, mjd, fibers, meta)
+    except Exception as e:
+
+        tb = traceback.format_exc()
+        logger.critical(f"Error processing {observatory} {mjd}: {e}\n{tb}")
+        return (observatory, mjd, [], {})
+
 
 def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: bool = False):
     """
@@ -214,31 +224,30 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
     """
 
     exposures = get_exposures(observatory, mjd)
-    exposure_sequences = {
+    sequences = {
         "objects": get_science_sequences(exposures),
         "arclamps": get_arclamp_sequences(exposures),
     }
     if fibers:
         catalogids, twomass_designations = (set(), set())
         # We only need to get targets for one exposure in each science sequence.
-        for si, ei in exposure_sequences["objects"]:
+        for si, ei in sequences["objects"]:
             exposure = exposures[si - 1]
             if exposure.fps:
                 for target in exposure.targets:
                     if target.expected_to_be_assigned_sdss_id:
                         catalogids.add(target.catalogid)
             else:
-                assert NotImplementedError("Plate targets not implemented yet.")
                 for target in exposure.targets:
-                    twomass_designations.add(target_id_to_designation(target.target_id))
+                    twomass_designations.add(target.twomass_designation)
 
         if meta:
             # We will often run `get_almanac_data` in parallel (through multiple processes),
             # so here we are avoiding opening a database connection until the child process starts.
             from almanac.database import is_database_available, catalogdb
 
-            sdss_id_given_catalogid = {}
-            sdss_id_given_twomass_designation = {}
+            lookup_catalog = {}
+            lookup_twomass = {}
             if catalogids and is_database_available:
                 q = (
                     catalogdb.SDSS_ID_flat
@@ -253,7 +262,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                     .tuples()
                 )
                 for sdss_id, catalogid in q:
-                    sdss_id_given_catalogid[catalogid] = sdss_id
+                    lookup_catalog[catalogid] = sdss_id
 
             if twomass_designations and is_database_available:
                 q = (
@@ -284,115 +293,17 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                     .tuples()
                 )
                 for sdss_id, designation in q:
-                    sdss_id_given_twomass_designation[designation] = sdss_id
+                    lookup_twomass[designation] = sdss_id
 
             # Add sdss_id to targets
-            for si, ei in exposure_sequences["objects"]:
+            for si, ei in sequences["objects"]:
                 for i in range(si - 1, ei):
                     exposure = exposures[i]
                     if exposure.fps:
                         for target in exposure.targets:
-                            target.sdss_id = sdss_id_given_catalogid.get(target.catalogid, -1)
+                            target.sdss_id = lookup_catalog.get(target.catalogid, -1)
                     else:
                         for target in exposure.targets:
-                            target.sdss_id = sdss_id_given_twomass_designation.get(
-                                target_id_to_designation(target.target_id), -1
-                            )
-            raise a
+                            target.sdss_id = lookup_twomass.get(target.target_id, -1)
 
-    assert len(exposures) > 0
-    #if len(exposures) == 0:
-    #    return (observatory, mjd, messages, None, None, None)
-
-    #exposures = Table(rows=list(exposures))
-
-    raise a
-    fiber_maps = dict(fps={}, plates={})
-    if fibers:
-        configids = set(exposures["configid"]).difference({"", "-1", "-999", None})
-        logger.debug(f"{observatory}/{mjd} checking fibers")
-        catalogids, fps_fiber_maps = get_fiber_mappings(
-            get_fps_targets, configids, observatory
-        )
-        logger.debug(f"{observatory}/{mjd} has {len(catalogids)} unique catalogids")
-
-        # Matching to the correct plate requires us to know which version of the
-        # plate was plugged. This is stored in the `name` header in the exposure
-        plate_fiber_maps = {}
-        for plate_id, name in unique(exposures["plateid", "name"]):
-            assert plate_id not in plate_fiber_maps, "Contact Andy, he will cry."
-            if plate_id in {"", "0", "-1"}:
-                continue
-            plate_fiber_maps[plate_id] = get_plate_targets(observatory, mjd, plate_id, name)
-
-
-        logger.debug(f"{observatory}/{mjd} has {len(twomass_designations)} unique 2mass designations")
-
-        fiber_maps["fps"].update(fps_fiber_maps)
-        fiber_maps["plates"].update(plate_fiber_maps)
-
-        if xmatch and is_database_available:
-            # Do a single database query and match [2mass/catalogid] -> sdss_id
-            # Match fps first.
-            logger.debug(f"{observatory}/{mjd} doing catalogid/sdss id cross-match")
-            if catalogids:
-                sdss_id_lookup = {}
-                q = (
-                    catalogdb.SDSS_ID_flat.select(
-                        catalogdb.SDSS_ID_flat.sdss_id, catalogdb.SDSS_ID_flat.catalogid
-                    )
-                    .where(
-                        catalogdb.SDSS_ID_flat.catalogid.in_(tuple(catalogids))
-                        & (catalogdb.SDSS_ID_flat.rank == 1)
-                    )
-                    .tuples()
-                )
-                for sdss_id, catalogid in q:
-                    sdss_id_lookup[catalogid] = sdss_id
-
-                for config_id, targets in fiber_maps["fps"].items():
-                    for target in targets:
-                        target["sdss_id"] = sdss_id_lookup.get(target["catalogid"], -1)
-
-            logger.debug(f"{observatory}/{mjd} doing 2mass/sdss id cross-match")
-
-            # Now match any plate targets.
-            if twomass_designations:
-                sdss_id_lookup = {}
-                q = (
-                    catalogdb.SDSS_ID_flat.select(
-                        catalogdb.SDSS_ID_flat.sdss_id, catalogdb.TwoMassPSC.designation
-                    )
-                    .join(
-                        catalogdb.CatalogToTwoMassPSC,
-                        on=(
-                            catalogdb.SDSS_ID_flat.catalogid
-                            == catalogdb.CatalogToTwoMassPSC.catalogid
-                        ),
-                    )
-                    .join(
-                        catalogdb.TwoMassPSC,
-                        on=(
-                            catalogdb.CatalogToTwoMassPSC.target_id
-                            == catalogdb.TwoMassPSC.pts_key
-                        ),
-                    )
-                    .where(
-                        catalogdb.TwoMassPSC.designation.in_(
-                            tuple(twomass_designations)
-                        )
-                    )
-                    .tuples()
-                )
-                for sdss_id, designation in q:
-                    sdss_id_lookup[designation] = sdss_id
-                for plate_id, targets in fiber_maps["plates"].items():
-                    for target in targets:
-                        target["sdss_id"] = sdss_id_lookup.get(
-                            target_id_to_designation(target["target_id"]), -1
-                        )
-
-    for fiber_type, mappings in fiber_maps.items():
-        for refid, targets in mappings.items():
-            fiber_maps[fiber_type][refid] = Table(rows=targets)
-    return (observatory, mjd, messages, exposures, sequence_indices, fiber_maps)
+    return (observatory, mjd, exposures, sequences)
