@@ -4,50 +4,19 @@ import click
 
 
 @click.group(invoke_without_command=True)
-@click.option("-v", "--verbosity", count=True, help="Verbosity level. Use -v to show progress, or -vv to show progress and exposure table")
-@click.option(
-    "--mjd",
-    default=None,
-    type=int,
-    help="Modified Julian date to query. Use negative values to indicate relative to current MJD",
-)
+@click.option("-v", "--verbosity", count=True, help="Verbosity level")
+@click.option("--mjd", default=None, type=int, help="Modified Julian date to query. Use negative values to indicate relative to current MJD")
 @click.option("--mjd-start", default=None, type=int, help="Start of MJD range to query")
 @click.option("--mjd-end", default=None, type=int, help="End of MJD range to query")
 @click.option("--date", default=None, type=str, help="Date to query (e.g., 2024-01-15)")
-@click.option(
-    "--date-start", default=None, type=str, help="Start of date range to query"
-)
+@click.option("--date-start", default=None, type=str, help="Start of date range to query")
 @click.option("--date-end", default=None, type=str, help="End of date range to query")
 @click.option("--apo", is_flag=True, help="Query Apache Point Observatory data")
 @click.option("--lco", is_flag=True, help="Query Las Campanas Observatory data")
-@click.option(
-    "--fibers", "--fibres", is_flag=True, help="Include fibre mappings to targets"
-)
-@click.option(
-    "--no-x-match", is_flag=True, help="Do not cross-match targets with SDSS-V database"
-)
+@click.option("--fibers", "--fibres", is_flag=True, help="Include fibre mappings to targets")
+@click.option("--no-x-match", is_flag=True, help="Do not cross-match targets with SDSS-V database")
 @click.option("--output", "-O", default=None, type=str, help="Output file")
-@click.option(
-    "--processes", "-p", default=None, type=int, help="Number of processes to use"
-)
-@click.option(
-    "--exposure-columns",
-    default="observatory,mjd,exposure,exptype,nread,lampqrtz,lampthar,lampune,configid,designid,fieldid,cartid,dithpix",
-    help="Comma-separated list of exposure columns to show",
-    show_default=True,
-)
-@click.option(
-    "--fps-columns",
-    default="sdss_id,catalogid,program,category,firstcarton,ra,dec,fiberId",
-    help="Comma-separated list of fiber positioner columns to show",
-    show_default=True,
-)
-@click.option(
-    "--plate-columns",
-    default="sdss_id,target_id,target_ra,target_dec,target_type,source_type,fiber_id",
-    help="Comma-separated list of plate columns to show",
-    show_default=True,
-)
+@click.option("--processes", "-p", default=None, type=int, help="Number of processes to use")
 @click.pass_context
 def main(
     ctx,
@@ -64,9 +33,6 @@ def main(
     no_x_match,
     output,
     processes,
-    exposure_columns,
-    fps_columns,
-    plate_columns,
 ):
     """
     Almanac collects metadata from planned and actual APOGEE exposures,
@@ -85,18 +51,14 @@ def main(
     from almanac import apogee, io, utils
     from contextlib import nullcontext
 
-    show_exposure_columns = exposure_columns.split(",")
-    show_fps_columns = fps_columns.split(",")
-    show_plate_columns = plate_columns.split(",")
-
     mjds, mjd_min, mjd_max = utils.parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end)
     observatories = utils.get_observatories(apo, lco)
 
     iterable = product(mjds, observatories)
     results = []
-    
+
     display = ObservationsDisplay(mjd_min, mjd_max, observatories)
-    
+
     buffered_critical_logs = []
     buffered_result_rows = []
 
@@ -106,7 +68,7 @@ def main(
         else nullcontext()
     )
 
-    with context_manager as live:                
+    with context_manager as live:
         if processes is not None:
 
             def initializer():
@@ -121,7 +83,8 @@ def main(
             import os
             import signal
             import concurrent.futures
-
+            if processes < 0:
+                processes = os.cpu_count()
             with concurrent.futures.ProcessPoolExecutor(
                 max_workers=processes, initializer=initializer
             ) as pool:
@@ -129,7 +92,7 @@ def main(
                 for total, (mjd, observatory) in enumerate(iterable, start=1):
                     futures.append(
                         pool.submit(
-                            apogee.get_almanac_data,
+                            apogee._safe_get_almanac_data,
                             observatory,
                             mjd,
                             fibers,
@@ -139,21 +102,22 @@ def main(
 
                 try:
                     for future in concurrent.futures.as_completed(futures):
-                        o, m, missing, *result = future.result()
-                        v = m - mjd_min + display.offset
-                        if missing:
+                        observatory, mjd, exposures, sequences = future.result()
+
+                        v = mjd - mjd_min + display.offset
+                        missing = [e.image_type == "missing" for e in exposures]
+                        if any(missing):
                             display.missing.add(v)
-                            buffered_critical_logs.extend(missing)
-                        
-                        exposures, sequences, fiber_maps = result
-                        if exposures is None:
+                            #buffered_critical_logs.extend(missing)
+
+                        if not exposures:
                             display.no_data.add(v)
-                            if live is not None: live.update(display.create_display())                            
+                            if live is not None: live.update(display.create_display())
                             continue
 
-                        display.completed[o].add(v)
+                        display.completed[observatory].add(v)
                         if live is not None: live.update(display.create_display())
-                        results.append(result)
+                        results.append((observatory, mjd, exposures, sequences))
 
                 except KeyboardInterrupt:
                     for pid in pool._processes:
@@ -163,33 +127,37 @@ def main(
 
         else:
             for mjd, observatory in iterable:
-                o, m, missing, *result = apogee.get_almanac_data(observatory, mjd, fibers, not no_x_match)
-                v = m - mjd_min + display.offset
-                if missing:
+                *_, exposures, sequences = apogee.get_almanac_data(observatory, mjd, fibers, not no_x_match)
+                v = mjd - mjd_min + display.offset
+                if any([e.image_type == "missing" for e in exposures]):
                     display.missing.add(v)
-                    buffered_critical_logs.extend(missing)
-                
-                exposures, sequences, fiber_maps = result
-                if exposures is None:
+                    #buffered_critical_logs.extend(missing)
+
+                if not exposures:
                     display.no_data.add(v)
                     if live is not None: live.update(display.create_display())
                     continue
-                
-                display.completed[o].add(v)
-                if live is not None: live.update(display.create_display())
-                results.append(result)
 
-    if verbosity >= 2:
-        from almanac.utils import rich_display_exposures
-        for e, s, *_ in results:
-            rich_display_exposures(e, s, column_names=show_exposure_columns)
+                display.completed[observatory].add(v)
+                if live is not None: live.update(display.create_display())
+                results.append((observatory, mjd, exposures, sequences))
+
+    #if verbosity >= 2:
+    #    from almanac.utils import rich_display_exposures
+    #    for e, s, *_ in results:
+    #        rich_display_exposures(e, s, column_names=show_exposure_columns)
 
     # Show critical logs at the end to avoid disrupting the display
     for item in buffered_critical_logs:
         logger.critical(item)
 
     if output:
-        io.write_almanac(output, results, verbose=(verbosity >= 3))
+        io.write_almanac(
+            output,
+            results,
+            fibers=fibers,
+            verbose=(verbosity >= 3)
+        )
 
 
 @main.group()
@@ -356,7 +324,7 @@ def exposures(input_path, output_path, overwrite, **kwargs):
                     groups = group
                 else:
                     groups = np.vstack([groups, group])
-                
+
         raise a
 
 if __name__ == "__main__":
