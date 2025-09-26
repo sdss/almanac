@@ -1,4 +1,15 @@
+import numpy as np
 from typing import Literal
+from typing_extensions import Annotated
+from pydantic import BeforeValidator
+
+def validate_np_int64(v):
+    if not isinstance(v, np.int64):
+        return np.int64(v)
+    return v
+
+Int64 = Annotated[np.int64, BeforeValidator(validate_np_int64)]
+
 
 Observatory = Literal["apo", "lco"]
 Prefix = Literal["apR", "asR"]

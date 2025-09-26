@@ -2,16 +2,19 @@ import os
 import numpy as np
 from astropy.table import Table
 from functools import partial, cached_property
-from pydantic import BaseModel, Field, computed_field, validator, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 from typing import Optional, Tuple, Union
 
 from almanac import utils
 from almanac.config import config
-from almanac.apogee import (get_headers, match_planned_to_plugged)
 
 from almanac.data_models.fps import FPSTarget
 from almanac.data_models.plate import PlateTarget
 from almanac.data_models.types import *
+from almanac.data_models.utils import (
+    get_headers, match_planned_to_plugged, get_exposure_path,
+    get_exposure_string, mjd_to_exposure_prefix
+)
 
 from almanac.qa import lookup_bad_exposures
 
@@ -22,7 +25,7 @@ class Exposure(BaseModel):
     mjd: int = Field(description="MJD of the exposure", ge=57_600)
     exposure: int = Field(description="Exposure number", ge=1)
     observatory: Observatory = Field(description="Observatory name")
-    prefix: Prefix = Field(description="Raw exposure basename prefix")
+    prefix: Optional[Prefix] = Field(description="Raw exposure basename prefix", default=None)
 
     #> Exposure Information
     name: Optional[str] = Field(
@@ -33,7 +36,7 @@ class Exposure(BaseModel):
         )
     )
     n_read: int = Field(default=0, alias="nread", ge=0)
-    image_type: ImageType = Field(default=None, alias="imagetyp")
+    image_type: ImageType = Field(alias="imagetyp")
     observer_comment: Optional[str] = Field(default="", alias="obscmnt")
 
     #> Identifiers
@@ -84,36 +87,41 @@ class Exposure(BaseModel):
         return int(np.sum(2**np.where(list(map(os.path.exists, self.paths)))[0]))
 
     # Validations
+    @field_validator('prefix', mode="before")
+    def validate_prefix(cls, v, values):
+        if v is None:
+            return dict(apo="apR", lco="asR").get(values.get("observatory"))
+        return v
 
-    @validator('image_type', pre=True)
+    @field_validator('image_type', mode="before")
     def validate_descriptive_type(cls, v):
         return v.lower()
 
-    @model_validator(mode='after')
-    def post_model_validation(self):
-        sanitised = self.observer_comment.lower().replace(' ', '')
+    @field_validator('image_type', mode="after")
+    def check_for_twilight_flat(cls, v, info):
+        sanitised = info.data.get("observer_comment", "").lower().replace(' ', '')
         if 'skyflat' in sanitised or 'twilight' in sanitised:
-            self.image_type = 'twilightflat'
-        return self
+            return 'twilightflat'
+        return v
 
-    @validator('cart_id', pre=True)
+    @field_validator('cart_id', mode="before")
     def validate_cart_id(cls, v):
         if isinstance(v, str) and v.strip().upper() == 'FPS':
             return 0
         return empty_string_to_int(v, -1)
 
-    @validator('map_id', 'plate_id', 'field_id', 'design_id', 'config_id', pre=True)
+    @field_validator('map_id', 'plate_id', 'field_id', 'design_id', 'config_id', mode="before")
     def validate_identifiers(cls, v):
         return empty_string_to_int(v, -1)
 
-    @validator('seeing', 'focus', 'collpist', 'colpitch', 'dithpix', pre=True)
+    @field_validator('seeing', 'focus', 'collpist', 'colpitch', 'dithpix', mode="before")
     def validate_floats(cls, v):
         try:
             return float(v)
         except:
             return float('NaN')
 
-    @validator('lamp_quartz', 'lamp_thar', 'lamp_une', pre=True)
+    @field_validator('lamp_quartz', 'lamp_thar', 'lamp_une', mode="before")
     def validate_lamps(cls, v):
         return {'F': 0, 'T': 1}.get(str(v).strip().upper(), -1)
 
@@ -306,7 +314,6 @@ class Exposure(BaseModel):
         return f"{self.__repr_name__()}(observatory={self.observatory}, mjd={self.mjd}, exposure={self.exposure}, image_type={self.image_type})"
 
     class Config:
-        frozen = True
         validate_by_name = True
         validate_assignment = True
 
@@ -317,16 +324,3 @@ def empty_string_to_int(v, default) -> int:
     elif v is None:
         return default
     return int(v)
-
-def get_exposure_path(observatory, mjd, prefix, exposure, chip):
-    return (
-        f"{config.apogee_dir}/"
-        f"{observatory}/"
-        f"{mjd}/"
-        f"{prefix}-{chip}-{get_exposure_string(mjd, exposure)}.apz"
-    )
-
-mjd_to_exposure_prefix = lambda mjd: max(0, (int(mjd) - 55_562) * 10_000)
-
-def get_exposure_string(mjd, exposure):
-    return f"{mjd_to_exposure_prefix(mjd) + exposure:08d}"

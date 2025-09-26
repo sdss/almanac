@@ -1,4 +1,6 @@
+import numpy as np
 from typing import Literal
+from typing_extensions import Annotated
 from pydantic import BaseModel, Field
 
 from almanac.data_models.types import *
@@ -8,7 +10,8 @@ class FPSTarget(BaseModel):
     """A target that was observed with the SDSS-V Fiber Positioning System."""
 
     # Target information
-    catalogid: int
+    sdss_id: Int64 = Field(default=-1)
+    catalogid: Int64
     category: Literal[Category] = Field(description="Category of the target")
     cadence: str = Field(description="Cadence identifier")
     firstcarton: str = Field(description="Main carton from which this carton was drawn")
@@ -67,6 +70,16 @@ class FPSTarget(BaseModel):
     too_id: int = Field(default=-1)
     too_program: str = Field(default="")
 
+    @property
+    def expected_to_be_assigned_sdss_id(self) -> bool:
+        """ A helper function so we don't try to cross-match sky targets for SDSS IDs. """
+        return (self.catalogid > 0
+            and not self.category.startswith("sky_")
+            and self.category != ""
+        )
+
+
     class Config:
         validate_by_name = True
         validate_assignment = True
+        arbitrary_types_allowed = True

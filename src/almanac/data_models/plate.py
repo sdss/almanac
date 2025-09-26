@@ -8,6 +8,7 @@ class PlateTarget(BaseModel):
     """ A target that was observed with plates. """
 
     # Target information
+    sdss_id: Int64 = Field(default=-1)
     target_ids: str = Field(alias="targetids")
     category: Literal[Category] = Field(description="Category of the target", alias="targettype")
 
@@ -74,3 +75,4 @@ class PlateTarget(BaseModel):
     class Config:
         validate_by_name = True
         validate_assignment = True
+        arbitrary_types_allowed = True
