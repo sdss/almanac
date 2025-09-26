@@ -1,7 +1,7 @@
 import logging
 import colorlog
 
-from almanac.config import config
+from almanac import config
 
 def get_formatter():
     return colorlog.ColoredFormatter(

@@ -60,7 +60,7 @@ class ObservationsDisplay:
 
         # Track completion status for each day
         self.completed = dict(apo=set(), lco=set())
-        self.no_data = set()
+        self.no_data = dict(apo=set(), lco=set())
         self.missing = set()
         self.offset = 0
         # Setup logging buffer
@@ -146,7 +146,7 @@ class ObservationsDisplay:
             return self.color_apo
         elif day_index in self.completed["lco"]:
             return self.color_lco
-        elif day_index in self.no_data:
+        elif day_index in self.no_data["apo"] and day_index in self.no_data["lco"]:
             return self.color_no_data
         else:
             return self.color_unknown

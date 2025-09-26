@@ -13,11 +13,15 @@ def match_planned_to_plugged(plate_hole_path, plug_map_path, tol=1e-5):
     planned = Table.read(plate_hole_path, format="yanny", tablename="STRUCT1")
     plugged = Table.read(plug_map_path, format="yanny", tablename="PLUGMAPOBJ")
 
-    planned = planned[
+    is_apogee = (
         (planned["holetype"] == "APOGEE")
     |   (planned["holetype"] == "APOGEE_SHARED")
     |   (planned["holetype"] == "APOGEE_SOUTH")
-    ]
+    )
+    if not any(is_apogee):
+        return []
+
+    planned = planned[is_apogee]
     plugged = plugged[plugged["spectrographId"] == 2]
 
     ra_dist = cdist(

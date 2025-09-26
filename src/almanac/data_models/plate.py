@@ -94,7 +94,10 @@ class PlateTarget(BaseModel):
     @model_validator(mode="after")
     def fix_fiber_mappings(self):
         # Dates from /uufs/chpc.utah.edu/common/home/sdss09/software/apogee/Linux/apogee/trunk/data/cal/apogee-n.par
-        # Mapping logic from https://github.com/sdss/apogee_drp/blob/4ab6a04e448b279f2514550802b6732693e9847a/python/apogee_drp/utils/plugmap.py#L210-L238
+        # The Python mapping logic originates from:
+        #   https://github.com/sdss/apogee_drp/blob/4ab6a04e448b279f2514550802b6732693e9847a/python/apogee_drp/utils/plugmap.py#L210-L238
+        # but that code has a bug in it (see below)
+
         # Check against fix_fiber_flag to avoid recursively fixing things.
         if self.observatory == "apo" and self.fix_fiber_flag == 0:
             if 56764 <= self.plugged_mjd <= 56773 and self.fiber_id >= 0:
@@ -107,20 +110,23 @@ class PlateTarget(BaseModel):
                 # Note that the DRP code has this in a way where it ONLY changes
                 # fibers 31, 37, 45, and 54, but their expressions are written in
                 # a way that you would think they are meant to be ranges.
-                # TODO: I've checked with Holtz
+
+                # This is because the DRP code has a transcription error from the
+                # original IDL code:
+                #   https://github.com/sdss/apogee/blob/master/pro/apogeereduce/aploadplugmap.pro#L210-L221
+
                 offset_ranges = [
                     (31, 36, +23),
                     (37, 44, +8),
                     (45, 52, -8),
                     (54, 59, -23),
-
-                    # and missing fibers from unpopulated 2 of MTP:
-                    (53, 53, -1),
-                    (60, 60, -1)
                 ]
                 for lower, upper, offset in offset_ranges:
                     if (lower <= self.fiber_id) & (self.fiber_id <= upper):
                         self.fiber_id += offset
                         break
+
+                if self.fiber_id in (53, 60):
+                    self.fiber_id = -1  # unpopulated fiber
 
         return self

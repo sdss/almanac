@@ -44,16 +44,18 @@ def main(
         command = dict(config=config, dump=dump)[ctx.invoked_subcommand]
         return ctx.invoke(command, **ctx.params)
 
+    import h5py as h5
     from itertools import product
     from rich.live import Live
-    from almanac.logger import logger
     from almanac.display import ObservationsDisplay
-    from almanac import apogee, io, utils
+    from almanac import apogee, logger, io, utils
     from contextlib import nullcontext
+    from time import time, sleep
 
     mjds, mjd_min, mjd_max = utils.parse_mjds(mjd, mjd_start, mjd_end, date, date_start, date_end)
     observatories = utils.get_observatories(apo, lco)
 
+    n_iterables = len(mjds) * len(observatories)
     iterable = product(mjds, observatories)
     results = []
 
@@ -62,85 +64,126 @@ def main(
     buffered_critical_logs = []
     buffered_result_rows = []
 
+    refresh_per_second = 1
     context_manager = (
-        Live(display.create_display(), refresh_per_second=2, screen=True)
+        Live(
+            display.create_display(),
+            refresh_per_second=refresh_per_second,
+            screen=True
+        )
         if verbosity >= 1
         else nullcontext()
     )
+    io_kwds = dict(fibers=fibers, compression=False)
+    with (h5.File(output, "a") if output else nullcontext()) as fp:
+        with context_manager as live:
+            if processes is not None:
+                def initializer():
+                    from sdssdb.peewee.sdss5db import database
 
-    with context_manager as live:
-        if processes is not None:
+                    if hasattr(database, "_state"):
+                        database._state.closed = True
+                        database._state.conn = None
+                    from almanac.database import database
 
-            def initializer():
-                from sdssdb.peewee.sdss5db import database
+                # Parallel
+                import os
+                import signal
+                import concurrent.futures
+                if processes < 0:
+                    processes = os.cpu_count()
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=processes, initializer=initializer
+                ) as pool:
 
-                if hasattr(database, "_state"):
-                    database._state.closed = True
-                    database._state.conn = None
-                from almanac.database import database
+                    try:
+                        futures = set()
+                        for n, (mjd, observatory) in enumerate(iterable, start=1):
+                            futures.add(
+                                pool.submit(
+                                    apogee.get_almanac_data,
+                                    observatory,
+                                    mjd,
+                                    fibers,
+                                    not no_x_match,
+                                )
+                            )
+                            if n == processes:
+                                break
 
-            # Parallel
-            import os
-            import signal
-            import concurrent.futures
-            if processes < 0:
-                processes = os.cpu_count()
-            with concurrent.futures.ProcessPoolExecutor(
-                max_workers=processes, initializer=initializer
-            ) as pool:
-                futures = []
-                for total, (mjd, observatory) in enumerate(iterable, start=1):
-                    futures.append(
-                        pool.submit(
-                            apogee._safe_get_almanac_data,
-                            observatory,
-                            mjd,
-                            fibers,
-                            not no_x_match,
-                        )
-                    )
+                        t = time()
+                        while len(futures) > 0:
 
-                try:
-                    for future in concurrent.futures.as_completed(futures):
-                        observatory, mjd, exposures, sequences = future.result()
+                            future = next(concurrent.futures.as_completed(futures))
 
-                        v = mjd - mjd_min + display.offset
-                        missing = [e.image_type == "missing" for e in exposures]
-                        if any(missing):
-                            display.missing.add(v)
-                            #buffered_critical_logs.extend(missing)
+                            observatory, mjd, exposures, sequences = future.result()
 
-                        if not exposures:
-                            display.no_data.add(v)
-                            if live is not None: live.update(display.create_display())
-                            continue
+                            v = mjd - mjd_min + display.offset
+                            missing = [e.image_type == "missing" for e in exposures]
+                            if any(missing):
+                                display.missing.add(v)
+                                #buffered_critical_logs.extend(missing)
 
+                            if not exposures:
+                                display.no_data[observatory].add(v)
+                            else:
+                                display.completed[observatory].add(v)
+                                if output:
+                                    io.update(fp, observatory, mjd, exposures, sequences, **io_kwds)
+
+                            if live is not None and (time() - t) > 1 / refresh_per_second:
+                                live.update(display.create_display())
+                                t = time()
+                            futures.remove(future)
+
+                            try:
+                                mjd, observatory = next(iterable)
+                            except StopIteration:
+                                None
+                            else:
+                                futures.add(
+                                    pool.submit(
+                                        apogee.get_almanac_data,
+                                        observatory,
+                                        mjd,
+                                        fibers,
+                                        not no_x_match,
+                                    )
+                                )
+
+
+                    except KeyboardInterrupt:
+                        for pid in pool._processes:
+                            os.kill(pid, signal.SIGKILL)
+                        pool.shutdown(wait=False, cancel_futures=True)
+                        try:
+                            fp.close()
+                        except:
+                            None
+                        raise KeyboardInterrupt
+            else:
+                t = time()
+                for mjd, observatory in iterable:
+                    *_, exposures, sequences = apogee.get_almanac_data(observatory, mjd, fibers, not no_x_match)
+                    v = mjd - mjd_min + display.offset
+                    if any([e.image_type == "missing" for e in exposures]):
+                        display.missing.add(v)
+                        #buffered_critical_logs.extend(missing)
+
+                    if not exposures:
+                        display.no_data[observatory].add(v)
+                    else:
                         display.completed[observatory].add(v)
-                        if live is not None: live.update(display.create_display())
-                        results.append((observatory, mjd, exposures, sequences))
+                        if output:
+                            io.update(fp, observatory, mjd, exposures, sequences, **io_kwds)
 
-                except KeyboardInterrupt:
-                    for pid in pool._processes:
-                        os.kill(pid, signal.SIGKILL)
-                    pool.shutdown(wait=False, cancel_futures=True)
-                    raise KeyboardInterrupt
+                    if live is not None and (time() - t) > 1 / refresh_per_second:
+                        live.update(display.create_display())
+                        t = time()
 
-        else:
-            for mjd, observatory in iterable:
-                *_, exposures, sequences = apogee.get_almanac_data(observatory, mjd, fibers, not no_x_match)
-                v = mjd - mjd_min + display.offset
-                if any([e.image_type == "missing" for e in exposures]):
-                    display.missing.add(v)
-                    #buffered_critical_logs.extend(missing)
-
-                if not exposures:
-                    display.no_data.add(v)
-                    if live is not None: live.update(display.create_display())
-                    continue
-
-                display.completed[observatory].add(v)
-                if live is not None: live.update(display.create_display())
-                results.append((observatory, mjd, exposures, sequences))
+            if live is not None:
+                live.update(display.create_display())
+                sleep(3)
 
     #if verbosity >= 2:
     #    from almanac.utils import rich_display_exposures
@@ -148,9 +191,10 @@ def main(
     #        rich_display_exposures(e, s, column_names=show_exposure_columns)
 
     # Show critical logs at the end to avoid disrupting the display
-    for item in buffered_critical_logs:
-        logger.critical(item)
+        for item in buffered_critical_logs:
+            logger.critical(item)
 
+    """
     if output:
         io.write_almanac(
             output,
@@ -158,7 +202,7 @@ def main(
             fibers=fibers,
             verbose=(verbosity >= 3)
         )
-
+    """
 
 @main.group()
 def config(**kwargs):
@@ -170,7 +214,8 @@ def config(**kwargs):
 def show(**kwargs):
     """Show all configuration settings"""
 
-    from almanac.config import asdict, config, get_config_path
+    from almanac import config, get_config_path
+    from dataclasses import asdict
 
     click.echo(f"Configuration path: {get_config_path()}")
     click.echo(f"Configuration:")
@@ -191,7 +236,8 @@ def show(**kwargs):
 def get(key, **kwargs):
     """Get a configuration value"""
 
-    from almanac.config import config, asdict
+    from almanac import config
+    from dataclasses import asdict
 
     def traverse(config, key, provenance=None, sep="."):
         parent, *child = key.split(sep, 1)
@@ -224,16 +270,11 @@ def get(key, **kwargs):
 @config.command
 @click.argument("key")
 @click.argument("value")
-def set(key, value, **kwargs):
+def update(key, value, **kwargs):
     """Update a configuration value"""
 
-    from almanac.config import (
-        config,
-        asdict,
-        is_dataclass,
-        get_config_path,
-        ConfigManager,
-    )
+    from almanac import config, get_config_path, ConfigManager
+    from dataclasses import asdict, is_dataclass
 
     def traverse(config, key, value, provenance=None, sep="."):
         parent, *child = key.split(sep, 1)

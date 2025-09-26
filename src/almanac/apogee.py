@@ -1,15 +1,12 @@
 import os
 import numpy as np
-import traceback
 from glob import glob
 from subprocess import check_output
 from astropy.table import Table, hstack, unique
 from itertools import groupby
 from typing import Optional, Tuple, Dict, List, Set, Generator, Any, Union
 
-from almanac import utils  # ensures the Yanny table reader/writer is registered
-from almanac.config import config
-from almanac.logger import logger
+from almanac import config, logger, utils
 from scipy.spatial.distance import cdist
 
 from almanac.data_models import Exposure
@@ -188,16 +185,6 @@ def get_science_sequences(exposures: List[Exposure]) -> List[Tuple[int, int]]:
     return get_sequences(exposures, "object", ("field_id", "plate_id", "config_id", "image_type"))
 
 
-def _safe_get_almanac_data(observatory, mjd, fibers, meta):
-    try:
-        return get_almanac_data(observatory, mjd, fibers, meta)
-    except Exception as e:
-
-        tb = traceback.format_exc()
-        logger.critical(f"Error processing {observatory} {mjd}: {e}\n{tb}")
-        return (observatory, mjd, [], {})
-
-
 def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: bool = False):
     """
     Return comprehensive almanac data for all exposures taken from a given observatory on a given MJD.
@@ -304,6 +291,6 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                             target.sdss_id = lookup_catalog.get(target.catalogid, -1)
                     else:
                         for target in exposure.targets:
-                            target.sdss_id = lookup_twomass.get(target.target_id, -1)
+                            target.sdss_id = lookup_twomass.get(target.twomass_designation, -1)
 
     return (observatory, mjd, exposures, sequences)

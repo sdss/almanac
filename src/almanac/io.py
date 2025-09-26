@@ -1,35 +1,63 @@
 import h5py as h5
 import numpy as np
 from tqdm import tqdm
-from typing import List, Literal, Dict, Any, Union, get_origin, get_args
+from typing import List, Literal, Dict, Any, Tuple, Union, get_origin, get_args
 from pydantic import BaseModel
 from pydantic.fields import (FieldInfo, ComputedFieldInfo)
 from pydantic_core import PydanticUndefined
 import datetime
 from enum import Enum
 
+from almanac.data_models import Exposure
 
+def write_almanac(
+    output: str,
+    results: List[Tuple[str, int, List[Exposure], Dict[str, List[Any]]]],
+    fibers: bool = False,
+    verbose: bool = False,
+    compression: bool = True
+):
+    """
+    Write the results of an Almanac query to an HDF5 file.
 
-def write_almanac(output, results, fibers, **kwargs):
+    :param output:
+        Path to the output HDF5 file.
+
+    :param results:
+        List of tuples containing (observatory, mjd, exposures, sequences).
+        - observatory: str, e.g., "apo" or "lco"
+        - mjd: int, Modified Julian Date
+        - exposures: List[Exposure], list of Exposure models
+        - sequences: Dict[str, List[Any]], dictionary of sequences by image type
+
+    :param fibers:
+        Whether to include fiber data in the output.
+
+    :param verbose:
+        Whether to print progress information.
+
+    :param compression:
+        Compression algorithm to use for datasets. If True, uses 'gzip'.
+    """
+
+    kwds = dict(fibers=fibers, verbose=verbose, compression=compression)
     with h5.File(output, "a") as fp:
-        for args in tqdm(results, desc=f"Updating {output}"):
-            _update_almanac(fp, *args, fibers=fibers, **kwargs)
+        for args in sorted(results, key=lambda x: (x[0], x[1])):
+            update(fp, *args, **kwds)
 
-def _update_almanac(
+def update(
     fp,
     observatory,
     mjd,
     exposures,
     sequences,
-    fibers,
-    compression=True,
-    verbose=False
+    fibers: bool = False,
+    verbose: bool = False,
+    compression: Union[bool, str] = True
 ):
-
     _print = print if verbose else lambda *args, **kwargs: None
 
     group = get_or_create_group(fp, f"{observatory}/{mjd}")
-    _print(f"\t{observatory}")
     _print(f"\t{observatory}/{mjd}")
 
     delete_hdf5_entry(group, "exposures")

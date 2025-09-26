@@ -5,8 +5,7 @@ from functools import partial, cached_property
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 from typing import Optional, Tuple, Union
 
-from almanac import utils
-from almanac.config import config
+from almanac import logger, config, utils
 
 from almanac.data_models.fps import FPSTarget
 from almanac.data_models.plate import PlateTarget
@@ -289,9 +288,6 @@ class Exposure(BaseModel):
             ):
                 if self.fps:
                     factory = FPSTarget
-
-                    # TODO: perhaps we should move this logic elsewhere, as it is
-                    #       getting a bit unwieldy
                     targets = Table.read(
                         self.config_summary_path,
                         format="yanny",
@@ -305,10 +301,12 @@ class Exposure(BaseModel):
                         self.plate_hole_path,
                         self.plug_map_path
                     )
-                    # Plugged MJD is necessary to understand where the fiber mapping
-                    # went wrong in early plate era.
-                    targets["plugged_mjd"] = self.plugged_mjd
-                    targets["observatory"] = self.observatory
+                    if targets:
+                        # Plugged MJD is necessary to understand where the fiber mapping
+                        # went wrong in early plate era.
+                        targets["plugged_mjd"] = self.plugged_mjd
+                        targets["observatory"] = self.observatory
+
                 self._targets = tuple([factory(**r) for r in targets])
             else:
                 self._targets = tuple()
