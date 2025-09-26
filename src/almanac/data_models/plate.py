@@ -39,7 +39,11 @@ class PlateHole(BaseModel):
 
     # Basic target information
     planned_hole_type: HoleType = Field(alias="holetype", description="Hole type string")
-    source_type: str = Field(alias="sourcetype", description="Source type string") # TODO
+    # TODO: Not sure if we should even include source_type, as it seems less consistent than category.
+    # Here is the list of unique lower-case entries:
+    # 100pc, elg , gg, lrg , na, qso , qso1_reobs , rm_tile1, rm_tile2, rv, rvfew, sci, sky, spiders_rass_agn , spiders_rass_clus , spiders_xclass_clus, spiders_xmmsl_agn , sta, std, tdss_b , tdss_cp , tdss_fes_actstar, tdss_fes_hypqso , tdss_rqs1 , tdss_rqs2 , tdss_rqs2v , tdss_rqs3v , sci-, sci-long, sci-med, sci-short, sky, standard
+
+    source_type: str = Field(alias="sourcetype", description="Source type string")
     target_ra: float = Field(description="Target right ascension")
     target_dec: float = Field(description="Target declination")
     target_ids: str = Field(alias="targetids")
@@ -85,8 +89,8 @@ class PlateTarget(PlateHole, PluggedHole, Target):
 
     """ An astronomical target that was observed with plates. """
 
-    @validator('hole_type', 'planned_hole_type', pre=True)
-    def validate_hole_type(cls, v):
+    @validator('hole_type', 'planned_hole_type', 'obj_type', 'source_type', pre=True)
+    def enforce_lower_case(cls, v):
         return v.lower()
 
     @validator('category', pre=True)

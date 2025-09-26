@@ -2,7 +2,7 @@ import os
 import numpy as np
 from astropy.table import Table
 from functools import partial, cached_property
-from pydantic import BaseModel, Field, computed_field, validator
+from pydantic import BaseModel, Field, computed_field, validator, model_validator
 from typing import Optional, Tuple, Literal
 
 from almanac import utils
@@ -141,7 +141,18 @@ class Exposure(BaseModel):
 
     @property
     def paths(self) -> Tuple[str]:
-        return tuple(map(partial(get_exposure_path, self.observatory, self.mjd, self.prefix, self.exposure), "abc"))
+        return tuple(
+            map(
+                partial(
+                    get_exposure_path,
+                    self.observatory,
+                    self.mjd,
+                    self.prefix,
+                    self.exposure
+                ),
+                "abc"
+            )
+        )
 
     @property
     def plate_hole_path(self):
