@@ -1,95 +1,63 @@
-from enum import Enum
-from typing import List, Literal, Optional
+from typing import Literal
 from pydantic import BaseModel, Field, validator
 
-from almanac.data_models.target import Target
 from almanac.data_models.types import *
 
-class PluggedHole(BaseModel):
+class PlateTarget(BaseModel):
 
-    """Frozen data class representing a plugged hole."""
+    """ A target that was observed with plates. """
 
-    class Config:
-        frozen = True
-
-    obj_id: List[int] = Field(alias="objId", min_items=5, max_items=5, description="Object IDs (5 elements)")
-    hole_type: HoleType = Field(alias="holeType", description="Type of hole")
-    obj_type: ObjType = Field(alias="objType", description="Object type")
-
-    ra: float = Field(description="Right ascension in degrees")
-    dec: float = Field(description="Declination in degrees")
-
-    x_focal: float = Field(alias="xFocal", description="X focal plane coordinate")
-    y_focal: float = Field(alias="yFocal", description="Y focal plane coordinate")
-
-    fiber_id: int = Field(alias="fiberId", description="Fiber ID")
-    spectrograph_id: int = Field(alias="spectrographId", description="Spectrograph ID")
-    throughput: int = Field(description="Throughput value")
-
-
-
-class PlateHole(BaseModel):
-
-    """Frozen data class representing a planned plate hole."""
-
-    class Config:
-        frozen = True
-
+    # Target information
+    target_ids: str = Field(alias="targetids")
     category: Literal[Category] = Field(description="Category of the target", alias="targettype")
 
-    # Basic target information
+    # Positioner and hole identifiers
+    hole_type: HoleType = Field(alias="holeType", description="Type of hole")
     planned_hole_type: HoleType = Field(alias="holetype", description="Hole type string")
-    # TODO: Not sure if we should even include source_type, as it seems less consistent than category.
-    # Here is the list of unique lower-case entries:
-    # 100pc, elg , gg, lrg , na, qso , qso1_reobs , rm_tile1, rm_tile2, rv, rvfew, sci, sky, spiders_rass_agn , spiders_rass_clus , spiders_xclass_clus, spiders_xmmsl_agn , sta, std, tdss_b , tdss_cp , tdss_fes_actstar, tdss_fes_hypqso , tdss_rqs1 , tdss_rqs2 , tdss_rqs2v , tdss_rqs3v , sci-, sci-long, sci-med, sci-short, sky, standard
+    obj_type: ObjType = Field(alias="objType", description="Object type")
+    assigned: bool = Field(description="Assigned flag")
 
-    source_type: str = Field(alias="sourcetype", description="Source type string")
-    target_ra: float = Field(description="Target right ascension")
-    target_dec: float = Field(description="Target declination")
-    target_ids: str = Field(alias="targetids")
+    # Status flags
+    conflicted: bool = Field(description="Conflicted flag")
+    ranout: bool = Field(description="Ran out flag")
+    outside: bool = Field(description="Outside flag")
 
-    # Plate and fiber information
+    # Position coordinates
+    x_focal: float = Field(description="X focal plane coordinate", alias="xfocal")
+    y_focal: float = Field(description="Y focal plane coordinate", alias="yfocal")
+    xf_default: float = Field(description="Default X focal coordinate")
+    yf_default: float = Field(description="Default Y focal coordinate")
+
+    # Target coordinates
+    ra: float = Field(description="Right ascension [deg]")
+    dec: float = Field(description="Declination [deg]")
+
+    # Wavelength information
+    lambda_eff: float = Field(description="Effective wavelength")
+    zoffset: float = Field(description="Z offset")
+
+    # Instrument identifiers
+    spectrograph_id: int = Field(alias="spectrographId", description="Spectrograph ID")
+    fiber_id: int = Field(alias="fiberId", description="Fiber ID")
+    planned_fiber_id: int = Field(alias="fiberid", description="Fiber ID")
+    throughput: int = Field(description="Throughput value")
+
+    # Plate-specific information
     iplateinput: int = Field(description="Plate input ID")
     pointing: int = Field(description="Pointing number")
     offset: int = Field(description="Offset value")
-    planned_fiber_id: int = Field(alias="fiberid", description="Fiber ID")
     block: int = Field(description="Block number")
     iguide: int = Field(description="Guide flag")
-
-    # Focal plane coordinates
-    xf_default: float = Field(description="Default X focal coordinate")
-    yf_default: float = Field(description="Default Y focal coordinate")
-    x_focal: float = Field(description="X focal plane coordinate", alias="xfocal")
-    y_focal: float = Field(description="Y focal plane coordinate", alias="yfocal")
-
-    # Spectroscopic parameters
-    lambda_eff: float = Field(description="Effective wavelength")
-    zoffset: float = Field(description="Z offset")
     bluefiber: int = Field(description="Blue fiber flag")
     chunk: int = Field(description="Chunk number")
     ifinal: int = Field(description="Final flag")
-
-    # File information
-    origfile: str = Field(description="Original file identifier")
-    fileindx: int = Field(description="File index")
 
     # Physical properties
     diameter: float = Field(description="Diameter")
     buffer: float = Field(description="Buffer size")
     priority: int = Field(description="Target priority")
 
-    # Status flags
-    assigned: int = Field(description="Assigned flag")
-    conflicted: int = Field(description="Conflicted flag")
-    ranout: int = Field(description="Ran out flag")
-    outside: int = Field(description="Outside flag")
-
-
-class PlateTarget(PlateHole, PluggedHole, Target):
-
-    """ An astronomical target that was observed with plates. """
-
-    @validator('hole_type', 'planned_hole_type', 'obj_type', 'source_type', pre=True)
+    @validator('hole_type', 'planned_hole_type', 'obj_type', pre=True)
     def enforce_lower_case(cls, v):
         return v.lower()
 
@@ -102,3 +70,7 @@ class PlateTarget(PlateHole, PluggedHole, Target):
             "na": ""
         }
         return translate_from_plate_to_fps.get(v.lower(), v)
+
+    class Config:
+        validate_by_name = True
+        validate_assignment = True

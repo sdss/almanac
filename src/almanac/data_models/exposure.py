@@ -3,16 +3,15 @@ import numpy as np
 from astropy.table import Table
 from functools import partial, cached_property
 from pydantic import BaseModel, Field, computed_field, validator, model_validator
-from typing import Optional, Tuple, Literal
+from typing import Optional, Tuple, Union
 
 from almanac import utils
 from almanac.config import config
 from almanac.apogee import (get_headers, match_planned_to_plugged)
 
-from almanac.data_models.types import *
-from almanac.data_models.target import Target
 from almanac.data_models.fps import FPSTarget
 from almanac.data_models.plate import PlateTarget
+from almanac.data_models.types import *
 
 from almanac.qa import lookup_bad_exposures
 
@@ -57,7 +56,7 @@ class Exposure(BaseModel):
     lamp_thar: int = Field(default=-1, alias="lampthar", ge=-1, le=1)
     lamp_une: int = Field(default=-1, alias="lampune", ge=-1, le=1)
 
-    _targets: Optional[Tuple[Target]] = None
+    _targets: Optional[Tuple[Union[FPSTarget, PlateTarget]]] = None
 
     @computed_field(description="Exposure string used in path")
     def exposure_string(self) -> str:
@@ -271,7 +270,7 @@ class Exposure(BaseModel):
         raise FileNotFoundError(f"No exposure files found for {self.observatory} {self.mjd} {self.exposure} {self.prefix}")
 
     @cached_property
-    def targets(self) -> Tuple[Target]:
+    def targets(self) -> Tuple[Union[FPSTarget, PlateTarget]]:
         if self._targets is None:
             if (
                 (self.image_type == "object")
