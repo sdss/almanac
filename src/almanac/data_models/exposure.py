@@ -305,6 +305,10 @@ class Exposure(BaseModel):
                         self.plate_hole_path,
                         self.plug_map_path
                     )
+                    # Plugged MJD is necessary to understand where the fiber mapping
+                    # went wrong in early plate era.
+                    targets["plugged_mjd"] = self.plugged_mjd
+                    targets["observatory"] = self.observatory
                 self._targets = tuple([factory(**r) for r in targets])
             else:
                 self._targets = tuple()

@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Literal
 from typing_extensions import Annotated
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from almanac.data_models.types import *
 
@@ -83,3 +83,16 @@ class FPSTarget(BaseModel):
         validate_by_name = True
         validate_assignment = True
         arbitrary_types_allowed = True
+
+
+    @model_validator(mode="after")
+    def fix_early_fiber_duplicates(self):
+        # From https://github.com/sdss/apogee_drp/blob/4ab6a04e448b279f2514550802b6732693e9847a/python/apogee_drp/utils/plugmap.py#L170-L180
+        if self.spectrograph_id == 2:
+            if self.positioner_id == 650 and self.fiber_id == 175:
+                self.fiber_id = 275
+            if self.positioner_id == 880 and self.fiber_id == 176:
+                self.fiber_id = 276
+            if self.positioner_id == 177 and self.fiber_id == 186:
+                self.fiber_id = 286
+        return self
