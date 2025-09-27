@@ -53,7 +53,7 @@ class Exposure(BaseModel):
     focus: float = Field(default=float('NaN'))
     collpist: float = Field(default=float('NaN'))
     colpitch: float = Field(default=float('NaN'))
-    dithpix: float = Field(default=float('NaN'))
+    dithered_pixels: float = Field(default=float('NaN'), alias="dithpix")
     lamp_quartz: int = Field(default=-1, alias="lampqrtz", ge=-1, le=1)
     lamp_thar: int = Field(default=-1, alias="lampthar", ge=-1, le=1)
     lamp_une: int = Field(default=-1, alias="lampune", ge=-1, le=1)
@@ -92,16 +92,15 @@ class Exposure(BaseModel):
             return dict(apo="apR", lco="asR").get(values.get("observatory"))
         return v
 
+    @field_validator("observer_comment", mode="before")
+    def sanitise_observer_comment(cls, v) -> str:
+        if v is None or str(v).lower() == "none":
+            return ""
+        return v.strip()
+
     @field_validator('image_type', mode="before")
     def validate_descriptive_type(cls, v):
         return v.lower()
-
-    @field_validator('image_type', mode="after")
-    def check_for_twilight_flat(cls, v, info):
-        sanitised = info.data.get("observer_comment", "").lower().replace(' ', '')
-        if 'skyflat' in sanitised or 'twilight' in sanitised:
-            return 'twilightflat'
-        return v
 
     @field_validator('cart_id', mode="before")
     def validate_cart_id(cls, v):
@@ -113,7 +112,7 @@ class Exposure(BaseModel):
     def validate_identifiers(cls, v):
         return empty_string_to_int(v, -1)
 
-    @field_validator('seeing', 'focus', 'collpist', 'colpitch', 'dithpix', mode="before")
+    @field_validator('seeing', 'focus', 'collpist', 'colpitch', 'dithered_pixels', mode="before")
     def validate_floats(cls, v):
         try:
             return float(v)
@@ -123,6 +122,14 @@ class Exposure(BaseModel):
     @field_validator('lamp_quartz', 'lamp_thar', 'lamp_une', mode="before")
     def validate_lamps(cls, v):
         return {'F': 0, 'T': 1}.get(str(v).strip().upper(), -1)
+
+    @model_validator(mode="after")
+    def check_fields(self):
+        if self.observer_comment is not None and self.image_type != "twilightflat":
+            sanitised = self.observer_comment.lower().replace(' ', '')
+            if 'skyflat' in sanitised or 'twilight' in sanitised:
+                self.image_type = 'twilightflat'
+        return self
 
     # TODO: we may want to change this to be way more descriptive, particularly
     #       when we start doing QA to make sure exposures look like they should
@@ -277,8 +284,22 @@ class Exposure(BaseModel):
         raise FileNotFoundError(f"No exposure files found for {self.observatory} {self.mjd} {self.exposure} {self.prefix}")
 
     @cached_property
+    def fiber_map(self):
+        return Table.read(self.config_summary_path, format="yanny", tablename="FIBERMAP")
+
+    @cached_property
+    def plug_map(self):
+        return Table.read(self.plug_map_path, format="yanny", tablename="PLUGMAPOBJ")
+
+    @cached_property
+    def plate_hole_map(self):
+        return Table.read(self.plate_hole_path, format="yanny", tablename="STRUCT1")
+
+
+    @cached_property
     def targets(self) -> Tuple[Union[FPSTarget, PlateTarget]]:
         if self._targets is None:
+
             if (
                 (self.image_type == "object")
             &   (
@@ -288,24 +309,25 @@ class Exposure(BaseModel):
             ):
                 if self.fps:
                     factory = FPSTarget
-                    targets = Table.read(
-                        self.config_summary_path,
-                        format="yanny",
-                        tablename="FIBERMAP"
-                    )
+                    targets = self.fiber_map
                     keep = (targets["fiberType"] == "APOGEE") & (targets["fiberId"] > 0)
                     targets = targets[keep]
                 else:
                     factory = PlateTarget
-                    targets = match_planned_to_plugged(
-                        self.plate_hole_path,
-                        self.plug_map_path
+                    bad_exposure_notes = (
+                        lookup_bad_exposures
+                        .get((self.observatory, self.mjd, self.exposure), {})
+                        .get("notes", None)
                     )
-                    if targets:
-                        # Plugged MJD is necessary to understand where the fiber mapping
-                        # went wrong in early plate era.
-                        targets["plugged_mjd"] = self.plugged_mjd
-                        targets["observatory"] = self.observatory
+                    if bad_exposure_notes == "missing_plug_map_file":
+                        targets = []
+                    else:
+                        targets = match_planned_to_plugged(self.plate_hole_map, self.plug_map)
+                        if targets:
+                            # Plugged MJD is necessary to understand where the fiber mapping
+                            # went wrong in early plate era.
+                            targets["plugged_mjd"] = self.plugged_mjd
+                            targets["observatory"] = self.observatory
 
                 self._targets = tuple([factory(**r) for r in targets])
             else:

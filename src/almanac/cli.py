@@ -47,7 +47,7 @@ def main(
     import h5py as h5
     from itertools import product
     from rich.live import Live
-    from almanac.display import ObservationsDisplay
+    from almanac.display import ObservationsDisplay, display_exposures
     from almanac import apogee, logger, io, utils
     from contextlib import nullcontext
     from time import time, sleep
@@ -116,7 +116,7 @@ def main(
 
                             future = next(concurrent.futures.as_completed(futures))
 
-                            observatory, mjd, exposures, sequences = future.result()
+                            observatory, mjd, exposures, sequences = result = future.result()
 
                             v = mjd - mjd_min + display.offset
                             missing = [e.image_type == "missing" for e in exposures]
@@ -128,6 +128,7 @@ def main(
                                 display.no_data[observatory].add(v)
                             else:
                                 display.completed[observatory].add(v)
+                                results.append(result)
                                 if output:
                                     io.update(fp, observatory, mjd, exposures, sequences, **io_kwds)
 
@@ -164,7 +165,7 @@ def main(
             else:
                 t = time()
                 for mjd, observatory in iterable:
-                    *_, exposures, sequences = apogee.get_almanac_data(observatory, mjd, fibers, not no_x_match)
+                    *_, exposures, sequences = result = apogee.get_almanac_data(observatory, mjd, fibers, not no_x_match)
                     v = mjd - mjd_min + display.offset
                     if any([e.image_type == "missing" for e in exposures]):
                         display.missing.add(v)
@@ -174,6 +175,7 @@ def main(
                         display.no_data[observatory].add(v)
                     else:
                         display.completed[observatory].add(v)
+                        results.append(result)
                         if output:
                             io.update(fp, observatory, mjd, exposures, sequences, **io_kwds)
 
@@ -183,26 +185,16 @@ def main(
 
             if live is not None:
                 live.update(display.create_display())
-                sleep(3)
+                if verbosity <= 1 and output is None:
+                    sleep(3)
 
-    #if verbosity >= 2:
-    #    from almanac.utils import rich_display_exposures
-    #    for e, s, *_ in results:
-    #        rich_display_exposures(e, s, column_names=show_exposure_columns)
+    if verbosity >= 2:
+        for observatory, mjd, exposures, sequences in results:
+            display_exposures(exposures, sequences)
 
     # Show critical logs at the end to avoid disrupting the display
         for item in buffered_critical_logs:
             logger.critical(item)
-
-    """
-    if output:
-        io.write_almanac(
-            output,
-            results,
-            fibers=fibers,
-            verbose=(verbosity >= 3)
-        )
-    """
 
 @main.group()
 def config(**kwargs):
@@ -329,44 +321,232 @@ def dump(**kwargs):
     pass
 
 # almanac dump star[s] almanac.h5 output.fits
+def check_paths_and_format(input_path, output_path, given_format, overwrite):
+    import os
+    import click
+
+    if not os.path.exists(input_path):
+        raise click.ClickException(f"Input path {input_path} does not exist")
+
+    if os.path.exists(output_path) and not overwrite:
+        raise click.ClickException(f"Output path {output_path} already exists. Use --overwrite to overwrite.")
+
+    if given_format is None:
+        if output_path.lower().endswith(".fits"):
+            return "fits"
+        elif output_path.lower().endswith(".csv"):
+            return "csv"
+        elif output_path.lower().endswith(".hdf5") or output_path.lower().endswith(".h5"):
+            return "hdf5"
+        else:
+            raise click.ClickException("Cannot infer output format from output path. Please specify --format")
+    return given_format
 
 
 @dump.command()
 @click.argument("input_path", type=str)
 @click.argument("output_path", type=str)
+@click.option("--format", "-f", default=None, type=click.Choice(["fits", "csv", "hdf5"]), help="Output format")
 @click.option("--overwrite", is_flag=True, help="Overwrite existing output file")
-def stars(input_path, output_path, overwrite, **kwargs):
+def stars(input_path, output_path, overwrite, format, **kwargs):
     """Create a star-level summary file"""
-    pass
-
-@dump.command()
-@click.argument("input_path", type=str)
-@click.argument("output_path", type=str)
-@click.option("--overwrite", is_flag=True, help="Overwrite existing output file")
-def visits(input_path, output_path, overwrite,**kwargs):
-    """Create a visit-level summary file"""
-    pass
-
-@dump.command()
-@click.argument("input_path", type=str)
-@click.argument("output_path", type=str)
-@click.option("--overwrite", is_flag=True, help="Overwrite existing output file")
-def exposures(input_path, output_path, overwrite, **kwargs):
-    """Create an exposure-level summary file"""
 
     import h5py as h5
-    import numpy as np
+    from copy import deepcopy
+    from collections import Counter
+
+    stars = {}
+    default = dict(
+        mjds_apo=set(),
+        mjds_lco=set(),
+        n_visits=0,
+        n_visits_apo=0,
+        n_visits_lco=0,
+        n_exposures=0,
+        n_exposures_apo=0,
+        n_exposures_lco=0,
+    )
+
+    output_format = check_paths_and_format(input_path, output_path, format, overwrite)
+    assert format != "hdf5", "HDF5 output not yet supported for star summaries."
     with h5.File(input_path, "r") as fp:
-        groups = None
+        for observatory in fp:
+            for mjd in fp[f"{observatory}"]:
+                group = fp[f"{observatory}/{mjd}"]
+
+                is_object = (
+                    (group["exposures/image_type"][:].astype(str) == "object")
+                )
+                fps = is_object * (group["exposures/config_id"][:] > 0)
+                plate = is_object * (group["exposures/plate_id"][:] > 0)
+
+                if not any(fps) and not any(plate) or "fibers" not in group:
+                    continue
+
+                # fps era
+                n_exposures_on_this_mjd = {}
+
+                if any(fps):
+                    config_ids = Counter(group["exposures/config_id"][:][fps])
+                elif any(plate):
+                    config_ids = Counter(group["exposures/plate_id"][:][plate])
+                else:
+                    continue
+
+                for config_id, n_exposures in config_ids.items():
+                    config_group = group[f"fibers/{config_id}"]
+
+                    ok = (
+                        (
+                            (config_group["catalogid"][:] > 0)
+                        |   (config_group["sdss_id"][:] > 0)
+                        |   (config_group["twomass_designation"][:].astype(str) != "")
+                        )
+                    *   (
+                            (config_group["category"][:].astype(str) == "science")
+                        |   (config_group["category"][:].astype(str) == "standard_apogee")
+                        |   (config_group["category"][:].astype(str) == "standard_boss")
+                        |   (config_group["category"][:].astype(str) == "open_fiber")
+                        )
+                    )
+                    sdss_ids = config_group["sdss_id"][:][ok]
+                    catalogids = config_group["catalogid"][:][ok]
+                    for sdss_id, catalogid in zip(sdss_ids, catalogids):
+                        stars.setdefault(sdss_id, deepcopy(default))
+                        stars[sdss_id].setdefault("catalogid", catalogid) # this can change over time,... should we track that/
+                        n_exposures_on_this_mjd.setdefault(sdss_id, 0)
+                        n_exposures_on_this_mjd[sdss_id] += n_exposures
+
+
+                for sdss_id, n_exposures in n_exposures_on_this_mjd.items():
+                    stars[sdss_id]["n_exposures"] += n_exposures
+                    stars[sdss_id][f"n_exposures_{observatory}"] += n_exposures
+                    stars[sdss_id]["n_visits"] += 1
+                    stars[sdss_id][f"n_visits_{observatory}"] += 1
+                    stars[sdss_id][f"mjds_{observatory}"].add(int(mjd))
+
+        rows = []
+        for sdss_id, meta in stars.items():
+            stars[sdss_id].update(
+                mjd_min_apo=min(meta["mjds_apo"]) if meta["mjds_apo"] else -1,
+                mjd_max_apo=max(meta["mjds_apo"]) if meta["mjds_apo"] else -1,
+                mjd_min_lco=min(meta["mjds_lco"]) if meta["mjds_lco"] else -1,
+                mjd_max_lco=max(meta["mjds_lco"]) if meta["mjds_lco"] else -1,
+            )
+            stars[sdss_id].pop("mjds_apo")
+            stars[sdss_id].pop("mjds_lco")
+            rows.append(dict(sdss_id=sdss_id, **meta))
+
+    from astropy.table import Table
+    t = Table(rows=rows)
+    t.write(output_path, format=output_format, overwrite=overwrite)
+
+
+
+@dump.command()
+@click.argument("input_path", type=str)
+@click.argument("output_path", type=str)
+@click.option("--format", "-f", default=None, type=click.Choice(["fits", "csv", "hdf5"]), help="Output format")
+@click.option("--overwrite", is_flag=True, help="Overwrite existing output file")
+def visits(input_path, output_path, format, overwrite, **kwargs):
+    """Create a visit-level summary file"""
+
+    pass
+
+
+
+@dump.command()
+@click.argument("input_path", type=str)
+@click.argument("output_path", type=str)
+@click.option("--format", "-f", default=None, type=click.Choice(["fits", "csv", "hdf5"]), help="Output format")
+@click.option("--overwrite", is_flag=True, help="Overwrite existing output file")
+def exposures(input_path, output_path, format, overwrite, **kwargs):
+    """Create an exposure-level summary file"""
+
+    import os
+    import h5py as h5
+    import numpy as np
+
+    output_format = check_paths_and_format(input_path, output_path, format, overwrite)
+
+    from almanac.data_models import Exposure
+
+    fields = { **Exposure.model_fields, **Exposure.model_computed_fields }
+    data = dict()
+    for field_name, field_spec in fields.items():
+        data[field_name] = []
+
+    with h5.File(input_path, "r") as fp:
         for observatory in ("apo", "lco"):
             for mjd in fp[observatory].keys():
-                group = fp[f"{observatory}/{mjd}/exposures"][:]
-                if groups is None:
-                    groups = group
-                else:
-                    groups = np.vstack([groups, group])
+                group = fp[f"{observatory}/{mjd}/exposures"]
+                for key in group.keys():
+                    data[key].extend(group[key][:])
 
-        raise a
+    if output_format == "hdf5":
+        from almanac.io import _write_models_to_hdf5_group
+
+        fields = { **Exposure.model_fields, **Exposure.model_computed_fields }
+
+        with h5.File(output_path, "w", track_order=True) as fp:
+            _write_models_to_hdf5_group(fields, data, fp)
+    else:
+        from astropy.table import Table
+        t = Table(data=data)
+        t.write(output_path, format=output_format, overwrite=overwrite)
+
+
+@dump.command()
+@click.argument("input_path", type=str)
+@click.argument("output_path", type=str)
+@click.option("--format", "-f", default=None, type=click.Choice(["fits", "csv", "hdf5"]), help="Output format")
+@click.option("--overwrite", is_flag=True, help="Overwrite existing output file")
+def fibers(input_path, output_path, format, overwrite, **kwargs):
+    """Create a fiber-level summary file"""
+
+    import os
+    import h5py as h5
+    import numpy as np
+
+    output_format = check_paths_and_format(input_path, output_path, format, overwrite)
+
+    from almanac.data_models.fps import FPSTarget
+    from almanac.data_models.plate import PlateTarget
+
+    fields = { **FPSTarget.model_fields, **FPSTarget.model_computed_fields,
+              **PlateTarget.model_fields, **PlateTarget.model_computed_fields }
+
+    defaults = { name: spec.default for name, spec in fields.items() if hasattr(spec, "default") }
+    defaults["twomass_designation"] = ""
+
+    data = dict()
+    for field_name, field_spec in fields.items():
+        data[field_name] = []
+
+    with h5.File(input_path, "r") as fp:
+        for observatory in ("apo", "lco"):
+            for mjd in fp[observatory].keys():
+                group = fp[f"{observatory}/{mjd}/fibers"]
+                for config_id in group.keys():
+                    group = fp[f"{observatory}/{mjd}/fibers/{config_id}"]
+                    n = len(group["sdss_id"][:])
+
+                    for field_name in data:
+                        if field_name in group.keys():
+                            data[field_name].extend(group[field_name][:])
+                        else:
+                            data[field_name].extend([defaults[field_name]] * n)
+
+    if output_format == "hdf5":
+        from almanac.io import _write_models_to_hdf5_group
+
+        with h5.File(output_path, "w", track_order=True) as fp:
+            _write_models_to_hdf5_group(fields, data, fp)
+    else:
+        from astropy.table import Table
+        t = Table(data=data)
+        t.write(output_path, format=output_format, overwrite=overwrite)
+
 
 if __name__ == "__main__":
     main()

@@ -229,11 +229,12 @@ def convert_value_for_hdf5(value, target_dtype):
 
     return value
 
+
 def write_models_to_hdf5_group(
     models: List[BaseModel],
     hdf5_group: h5.Group,
     chunk_size: int = 1000,
-    compression: str = 'gzip'
+    compression: str = None
 ):
     """
     Write a list of Pydantic models to an HDF5 group as separate datasets per field.
@@ -244,24 +245,38 @@ def write_models_to_hdf5_group(
         chunk_size: Chunk size for HDF5 datasets (for performance)
         compression: Compression algorithm ('gzip', 'lzf', 'szip', None)
     """
-    if not models:
-        raise ValueError("No models provided")
-
-    # Get the model type from the first model
     model_type = type(models[0])
 
-    # Verify all models are the same type
-    if not all(isinstance(model, model_type) for model in models):
-        raise ValueError("All models must be of the same type")
-
-    num_records = len(models)
-
     fields = { **model_type.model_fields, **model_type.model_computed_fields }
+
+    data = {
+        field_name: extract_field_data(models, field_name) for field_name in fields.keys()
+    }
+    return _write_models_to_hdf5_group(
+        fields,
+        data,
+        hdf5_group,
+        chunk_size=chunk_size,
+        compression=compression
+    )
+
+
+def _write_models_to_hdf5_group(
+    fields,
+    data,
+    hdf5_group,
+    chunk_size: int = 1000,
+    compression: str = None
+):
+    num_records = None
 
     for field_name, field_spec in fields.items():
 
         # Extract data for this field from all models
-        field_data = extract_field_data(models, field_name)
+        field_data = data[field_name]
+        if num_records is None:
+            num_records = len(field_data)
+
 
         # Determine the appropriate HDF5 dtype
         if isinstance(field_spec, FieldInfo):

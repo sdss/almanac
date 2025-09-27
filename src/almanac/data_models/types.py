@@ -55,7 +55,8 @@ HoleType = Literal[
     "apogee_shared",
     "apogee_south",
     "bosshalf",
-    "boss_shared"
+    "boss_shared",
+    "fps"
 ]
 
 ObjType = Literal[
