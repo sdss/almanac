@@ -171,10 +171,6 @@ Main CLI entry point with comprehensive options for querying APOGEE data.
 - `--processes/-p`: Parallel processing
 - `--verbosity/-v`: Verbosity level (stackable)
 
-**Column Selection Options:**
-- `--exposure-columns`: Comma-separated exposure columns
-- `--fps-columns`: Fiber positioner columns  
-- `--plate-columns`: Plate-based observation columns
 
 ### Configuration Subcommands
 
@@ -262,6 +258,3 @@ The package includes robust error handling for:
 
 Errors are logged using the configured logging system with appropriate severity levels.
 
-## Usage Examples
-
-See [User Guide](user-guide.md) and [Examples](examples/) for practical usage examples of the API.

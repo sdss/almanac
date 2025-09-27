@@ -88,7 +88,7 @@ almanac config set sdssdb.host closer-database-mirror.org
 almanac --mjd -1 --no-x-match
 
 # Raw exposure data doesn't require database
-almanac --mjd -1 --exposure-columns "observatory,mjd,exposure,exptype"
+almanac --mjd -1
 ```
 
 ## Data and File Access
@@ -116,8 +116,8 @@ almanac --mjd -1 --exposure-columns "observatory,mjd,exposure,exptype"
 
 **A:** Control file size with:
 ```bash
-# Limit columns
-almanac --exposure-columns "observatory,mjd,exposure,exptype" --output smaller.h5
+# Save to smaller file
+almanac --mjd -1 --output smaller.h5
 
 # Skip fiber data if not needed
 almanac --mjd-start -30 --output no-fibers.h5
@@ -201,11 +201,8 @@ almanac --mjd -2 --output results.h5  # Adds to same file
 
 Use different column options for each:
 ```bash
-# For plate-based observations
-almanac --plate-columns "sdss_id,target_ra,target_dec,fiber_id"
-
-# For FPS observations  
-almanac --fps-columns "sdss_id,catalogid,ra,dec,fiberId"
+# Get all available data for plate-based and FPS observations
+almanac --fibers --mjd -1
 ```
 
 ## Performance and Optimization
@@ -232,7 +229,7 @@ almanac --fps-columns "sdss_id,catalogid,ra,dec,fiberId"
 
 4. **Select only needed columns**:
    ```bash
-   almanac --exposure-columns "observatory,mjd,exposure,exptype"
+   almanac --mjd-start -7
    ```
 
 ### Q: How many processes should I use?
@@ -337,7 +334,7 @@ pip install git+https://github.com/sdss/almanac
 
 3. **Check sequence patterns**:
    ```bash
-   almanac --mjd -1 --exposure-columns "observatory,mjd,exposure,exptype"
+   almanac --mjd -1
    ```
 
 ### Q: Some targets show "N/A" or missing information

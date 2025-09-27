@@ -104,22 +104,9 @@ almanac -O monthly.h5 --date-start 2024-01-01 --date-end 2024-01-31
 
 ## Advanced Features
 
-### Custom Column Selection
+### Data Access
 
-**Exposure Columns**:
-```bash
-almanac --exposure-columns "observatory,mjd,exposure,exptype,seeing"
-```
-
-**FPS (Fiber Positioner) Columns**:
-```bash
-almanac --fps-columns "sdss_id,catalogid,ra,dec,fiberId"
-```
-
-**Plate Columns**:
-```bash
-almanac --plate-columns "sdss_id,target_ra,target_dec,target_type"
-```
+The CLI provides access to all available data columns automatically. Column selection and filtering are handled through the package's data model, providing a complete view of survey operations.
 
 ### Performance Tuning
 
@@ -177,11 +164,11 @@ almanac --date-start 2024-01-01 --date-end 2024-03-31 --fibers
 ### Data Quality Assessment
 
 ```bash
-# Check exposures with full metadata
-almanac --mjd-start -7 -vv --exposure-columns "all"
+# Check recent exposures with full output
+almanac --mjd-start -7 -vv
 
-# Focus on specific exposure types
-almanac --mjd-start -1 --exposure-columns "observatory,mjd,exposure,exptype,seeing,focus"
+# Focus on yesterday's data
+almanac --mjd-start -1 -v
 ```
 
 ### Export for Analysis
@@ -219,5 +206,4 @@ almanac --mjd -1 --output daily_$(date +%Y%m%d).h5
 
 - See [Configuration Guide](configuration.md) for customization options
 - Check [CLI Reference](cli-reference.md) for complete command documentation
-- Review [Examples](examples/) for specific use cases
 - Visit [API Reference](api-reference.md) for programmatic usage

@@ -55,10 +55,7 @@ templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 # The suffix(es) of source filenames.
-source_suffix = {
-    '.rst': None,
-    '.md': 'myst_parser',
-}
+source_suffix = ['.rst', '.md']
 
 # The master toctree document.
 master_doc = 'index'
@@ -66,24 +63,14 @@ master_doc = 'index'
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.
-html_theme = 'sphinx_rtd_theme'
+html_theme = 'furo'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.
 html_theme_options = {
-    'canonical_url': '',
-    'analytics_id': '',
-    'logo_only': False,
-    'display_version': True,
-    'prev_next_buttons_location': 'bottom',
-    'style_external_links': False,
-    'vcs_pageview_mode': '',
-    # Toc options
-    'collapse_navigation': True,
-    'sticky_navigation': True,
-    'navigation_depth': 4,
-    'includehidden': True,
-    'titles_only': False
+    "source_repository": "https://github.com/andycasey/almanac/",
+    "source_branch": "main",
+    "source_directory": "docs/",
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,
@@ -91,13 +78,6 @@ html_theme_options = {
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-# Custom sidebar templates, maps document names to template names.
-html_sidebars = {
-    '**': [
-        'relations.html',  # needs 'show_related': True theme option to display
-        'searchbox.html',
-    ]
-}
 
 # -- Options for HTMLHelp output ---------------------------------------------
 
@@ -127,7 +107,9 @@ autodoc_mock_imports = [
     'sdssdb',
     'pydl',
     'colorlog',
-    'rich'
+    'rich',
+    'pydantic',
+    'pydantic_core'
 ]
 
 # -- Options for Napoleon extension ------------------------------------------

@@ -84,25 +84,6 @@ Number of parallel processes for data processing.
 - **Default**: Automatic based on available CPU cores
 - **Example**: `almanac --processes 4 --mjd-start -30`
 
-### Column Selection
-
-#### `--exposure-columns <columns>`
-Comma-separated list of exposure columns to display/include.
-- **Default**: `"observatory,mjd,exposure,exptype,nread,lampqrtz,lampthar,lampune,configid,designid,fieldid,cartid,dithpix"`
-- **Special**: Use `"all"` for all available columns
-- **Example**: `almanac --exposure-columns "observatory,mjd,exposure,exptype,seeing"`
-
-#### `--fps-columns <columns>`
-Comma-separated list of FPS (Fiber Positioner System) columns.
-- **Default**: `"sdss_id,catalogid,program,category,firstcarton,ra,dec,fiberId"`
-- **Special**: Use `"all"` for all available columns  
-- **Example**: `almanac --fps-columns "sdss_id,ra,dec,fiberId"`
-
-#### `--plate-columns <columns>`
-Comma-separated list of plate-based observation columns.
-- **Default**: `"sdss_id,target_id,target_ra,target_dec,target_type,source_type,fiber_id"`
-- **Special**: Use `"all"` for all available columns
-- **Example**: `almanac --plate-columns "sdss_id,target_ra,target_dec,fiber_id"`
 
 ## Configuration Commands
 
@@ -176,8 +157,8 @@ almanac --mjd 60000 --fibers
 # Fast fiber query (no cross-matching)
 almanac --mjd 60000 --fibers --no-x-match
 
-# Custom fiber columns
-almanac --mjd 60000 --fibers --fps-columns "sdss_id,ra,dec,fiberId"
+# Get fibers for specific MJD
+almanac --mjd 60000 --fibers
 ```
 
 ### Output and Performance
@@ -189,8 +170,8 @@ almanac --output survey.h5 --mjd-start -30 -v
 # Parallel processing
 almanac --processes 8 --mjd-start -7 --output week.h5
 
-# Verbose output with custom columns
-almanac -vv --exposure-columns "observatory,mjd,exposure,seeing,focus"
+# Verbose output
+almanac -vv --mjd-start -7
 ```
 
 ### Configuration Management
@@ -226,9 +207,8 @@ almanac --mjd-start -7 --fibers --output weekly.h5 -vv
 almanac --date-start 2024-01-01 --date-end 2024-03-31 \\
         --fibers --output q1_2024.h5 -v
 
-# Focus on specific exposure types
-almanac --mjd-start -30 --exposure-columns "observatory,mjd,exposure,exptype" \\
-        --output exposures.h5
+# Export recent observations
+almanac --mjd-start -30 --output exposures.h5
 ```
 
 ### Troubleshooting

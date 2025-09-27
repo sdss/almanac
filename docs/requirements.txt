@@ -1,6 +1,6 @@
 # Documentation build requirements for ReadTheDocs
-Sphinx>=3.0.0,<8.0.0
-sphinx_rtd_theme>=1.0.0
+Sphinx>=5.0.0,<8.0.0
+furo>=2023.3.27
 sphinx-autodoc-typehints>=1.12.0
 myst-parser>=0.18.0
 sphinxcontrib-bibtex>=2.4.0
@@ -12,4 +12,5 @@ astropy
 h5py
 click
 pydl
+linkify-it-py
 # Note: sdssdb and other complex dependencies may need mocking

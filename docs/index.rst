@@ -1,5 +1,5 @@
-almanac Documentation
-=====================
+almanac 
+=======
 
 ``almanac`` scrapes headers from raw image files and cross-matches those against the SDSS database to create a comprehensive summary of everything ever observed with an APOGEE instrument.
 
@@ -32,7 +32,6 @@ Table of Contents
    cli-reference
    configuration
    data-formats
-   examples/README
    faq
 
 .. toctree::
