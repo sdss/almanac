@@ -95,7 +95,7 @@ def get_expected_number_of_exposures(observatory: str, mjd: int) -> int:
     except:
         return -1
 
-      
+
 def organize_exposures(exposures: List[Exposure]) -> List[Exposure]:
     """
     Identify any missing exposures (based on non-contiguous exposure numbers)
@@ -169,7 +169,7 @@ def get_arclamp_sequences(exposures: List[Exposure]) -> List[Tuple[int, int]]:
     :returns:
         List of tuples containing (start_exposure, end_exposure) for each arc lamp sequence.
     """
-    return get_sequences(exposures, "arclamp", ("dithpix", ))
+    return get_sequences(exposures, "arclamp", ("dithered_pixels", ))
 
 
 def get_science_sequences(exposures: List[Exposure]) -> List[Tuple[int, int]]:
@@ -221,13 +221,12 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
         # We only need to get targets for one exposure in each science sequence.
         for si, ei in sequences["objects"]:
             exposure = exposures[si - 1]
-            if exposure.fps:
-                for target in exposure.targets:
-                    if target.expected_to_be_assigned_sdss_id:
+            for target in exposure.targets:
+                if target.expected_to_be_assigned_sdss_id:
+                    if target.catalogid > 0:
                         catalogids.add(target.catalogid)
-            else:
-                for target in exposure.targets:
-                    twomass_designations.add(target.twomass_designation)
+                    else:
+                        twomass_designations.add(target.twomass_designation)
 
         if meta:
             # We will often run `get_almanac_data` in parallel (through multiple processes),
@@ -287,11 +286,15 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
             for si, ei in sequences["objects"]:
                 for i in range(si - 1, ei):
                     exposure = exposures[i]
-                    if exposure.fps:
-                        for target in exposure.targets:
-                            target.sdss_id = lookup_catalog.get(target.catalogid, -1)
-                    else:
-                        for target in exposure.targets:
-                            target.sdss_id = lookup_twomass.get(target.twomass_designation, -1)
+                    for target in exposure.targets:
+
+                        matches = [
+                            lookup_catalog.get(target.catalogid, -1),
+                            lookup_twomass.get(target.twomass_designation, -1)
+                        ]
+                        for match in matches:
+                            if match > 0:
+                                target.sdss_id = match
+                                break
 
     return (observatory, mjd, exposures, sequences)

@@ -1,9 +1,10 @@
 import numpy as np
 from typing import Literal
 from typing_extensions import Annotated
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 from almanac.data_models.types import *
+from almanac.data_models.utils import sanitise_twomass_designation
 
 class FPSTarget(BaseModel):
 
@@ -11,17 +12,22 @@ class FPSTarget(BaseModel):
 
     # Target information
     sdss_id: Int64 = Field(default=-1)
-    catalogid: Int64
+    catalogid: Int64 = Field(default=-1)
+    twomass_designation: str = Field(default="", alias="tmass_id")
     category: Literal[Category] = Field(description="Category of the target")
-    cadence: str = Field(description="Cadence identifier")
-    firstcarton: str = Field(description="Main carton from which this carton was drawn")
-    program: str = Field(description="Program for 'firstcarton'")
+    cadence: str = Field(description="Cadence identifier", default="")
+    firstcarton: str = Field(description="Main carton from which this carton was drawn", default="")
+    program: str = Field(description="Program for 'firstcarton'", default="")
 
     # Positioner and hole identifiers
-    positioner_id: int = Field(alias='positionerId', description="Positioner identifier")
-    hole_id: str = Field(alias='holeId', description="Hole ID in which the positioner is sitting")
-    fiber_type: str = Field(alias='fiberType', description="Type of fiber")
+    positioner_id: int = Field(alias='positionerId', description="Positioner identifier", default=-1)
+    hole_id: str = Field(alias='holeId', description="Hole ID in which the positioner is sitting", default="")
+    hole_type: HoleType = Field(alias="holeType", description="Type of hole", default="fps")
+    planned_hole_type: HoleType = Field(alias="holetype", description="Hole type string", default="fps")
+
+    fiber_type: str = Field(alias='fiberType', description="Type of fiber", default="")
     assigned: bool = Field(
+        default=False,
         description=(
             "Target is assigned to this fiber in `robostrategy`. If False, no "
             "target assigned for this fiber (likely BOSS instead), and no "
@@ -30,21 +36,21 @@ class FPSTarget(BaseModel):
     )
 
     # Status flags
-    on_target: bool = Field(description="Fiber placed on target")
-    disabled: bool = Field(default=False, description="Fiber is disabled")
-    valid: bool = Field(description="Converted on-sky coordinates to robot (α,β)")
-    decollided: bool = Field(description="Positioner had to be moved to decollide it")
+    on_target: bool = Field(description="Fiber placed on target", default=False)
+    disabled: bool = Field(description="Fiber is disabled", default=False)
+    valid: bool = Field(description="Converted on-sky coordinates to robot (α,β)", default=False)
+    decollided: bool = Field(description="Positioner had to be moved to decollide it", default=False)
 
     # Position coordinates
     x_wok: float = Field(description="x-coordinate in the wok frame", default=float('NaN'), alias="xwok")
     y_wok: float = Field(description="y-coordinate in the wok frame", default=float('NaN'), alias="ywok")
     z_wok: float = Field(description="z-coordinate in the wok frame", default=float('NaN'), alias="zwok")
-    x_focal: float = Field(description="x-coordinate in the focal plane", alias='xFocal')
-    y_focal: float = Field(description="y-coordinate in the focal plane", alias='yFocal')
+    x_focal: float = Field(description="x-coordinate in the focal plane", default=float('NaN'), alias='xFocal')
+    y_focal: float = Field(description="y-coordinate in the focal plane", default=float('NaN'), alias='yFocal')
 
     # Angles
-    alpha: float = Field(description="Alpha angle of the positioner arm")
-    beta: float = Field(description="Beta angle of the positioner arm")
+    alpha: float = Field(description="Alpha angle of the positioner arm", default=float('NaN'))
+    beta: float = Field(description="Beta angle of the positioner arm", default=float('NaN'))
 
     # Target coordinates
     ra: float = Field(alias="racat", description="Right Ascension [deg]")
@@ -58,8 +64,8 @@ class FPSTarget(BaseModel):
     coord_epoch: float = Field(default=0.0)
 
     # Instrument identifiers
-    spectrograph_id: int = Field(description="Spectrograph identifier", alias='spectrographId')
-    fiber_id: int = Field(description="Fiber identifier", alias='fiberId')
+    spectrograph_id: int = Field(description="Spectrograph identifier", alias='spectrographId', default=-1)
+    fiber_id: int = Field(description="Fiber identifier", alias='fiberId', default=-1)
 
     # Position deltas
     delta_ra: float = Field(description="The amount in RA this fiber has been offset", default=float('NaN'))
@@ -77,6 +83,11 @@ class FPSTarget(BaseModel):
             and not self.category.startswith("sky_")
             and self.category != ""
         )
+
+    @field_validator("twomass_designation", mode="before")
+    def strip_twomass_designation(cls, v) -> str:
+        """ Convert a target ID to a standardized designation format. """
+        return sanitise_twomass_designation(v)
 
 
     class Config:

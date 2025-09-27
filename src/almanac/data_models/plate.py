@@ -2,6 +2,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, validator, model_validator, computed_field
 
 from almanac.data_models.types import *
+from almanac.data_models.utils import sanitise_twomass_designation
 
 class PlateTarget(BaseModel):
 
@@ -9,66 +10,65 @@ class PlateTarget(BaseModel):
 
     # Target information
     sdss_id: Int64 = Field(default=-1)
-    target_ids: str = Field(alias="targetids")
+    catalogid: Int64 = Field(default=-1)
+
+    @computed_field
+    def twomass_designation(self) -> str:
+        """ Convert a target ID to a standardized designation format. """
+        return sanitise_twomass_designation(self.twomass_id or self.target_ids)
+
+    twomass_id: str = Field(alias="tmass_id", default="")
+    target_ids: str = Field(alias="targetids", default="")
     category: Literal[Category] = Field(description="Category of the target", alias="targettype")
 
     # Positioner and hole identifiers
     observatory: Literal[Observatory] = Field(description="Observatory") # necessary for fiber mapping fixes
     hole_type: HoleType = Field(alias="holeType", description="Type of hole")
     planned_hole_type: HoleType = Field(alias="holetype", description="Hole type string")
-    obj_type: ObjType = Field(alias="objType", description="Object type")
-    assigned: bool = Field(description="Assigned flag")
+    obj_type: ObjType = Field(alias="objType", description="Object type", default="na")
+    assigned: bool = Field(description="Assigned flag", default=False)
 
     # Status flags
-    conflicted: bool = Field(description="Conflicted flag")
-    ranout: bool = Field(description="Ran out flag")
-    outside: bool = Field(description="Outside flag")
+    conflicted: bool = Field(description="Conflicted flag", default=False)
+    ranout: bool = Field(description="Ran out flag", default=False)
+    outside: bool = Field(description="Outside flag", default=False)
 
     # Position coordinates
-    x_focal: float = Field(description="X focal plane coordinate", alias="xfocal")
-    y_focal: float = Field(description="Y focal plane coordinate", alias="yfocal")
-    xf_default: float = Field(description="Default X focal coordinate")
-    yf_default: float = Field(description="Default Y focal coordinate")
+    x_focal: float = Field(description="X focal plane coordinate", alias="xfocal", default=float('NaN'))
+    y_focal: float = Field(description="Y focal plane coordinate", alias="yfocal", default=float('NaN'))
+    xf_default: float = Field(description="Default X focal coordinate", default=float('NaN'))
+    yf_default: float = Field(description="Default Y focal coordinate", default=float('NaN'))
 
     # Target coordinates
     ra: float = Field(description="Right ascension [deg]")
     dec: float = Field(description="Declination [deg]")
 
     # Wavelength information
-    lambda_eff: float = Field(description="Effective wavelength")
-    zoffset: float = Field(description="Z offset")
+    lambda_eff: float = Field(description="Effective wavelength", default=0.0)
+    zoffset: float = Field(description="Z offset", default=0.0)
 
     # Instrument identifiers
-    spectrograph_id: int = Field(alias="spectrographId", description="Spectrograph ID")
-    fiber_id: int = Field(alias="fiberId", description="Fiber ID")
-    planned_fiber_id: int = Field(alias="fiberid", description="Fiber ID")
-    throughput: int = Field(description="Throughput value")
+    spectrograph_id: int = Field(alias="spectrographId", description="Spectrograph ID", default=-1)
+    fiber_id: int = Field(alias="fiberId", description="Fiber ID", default=-1)
+    planned_fiber_id: int = Field(alias="fiberid", description="Fiber ID", default=-1)
+    throughput: int = Field(description="Throughput value", default=-1)
 
     # Plate-specific information
-    iplateinput: int = Field(description="Plate input ID")
-    pointing: int = Field(description="Pointing number")
-    offset: int = Field(description="Offset value")
-    block: int = Field(description="Block number")
-    iguide: int = Field(description="Guide flag")
-    bluefiber: int = Field(description="Blue fiber flag")
-    chunk: int = Field(description="Chunk number")
-    ifinal: int = Field(description="Final flag")
-    plugged_mjd: int = Field(description="MJD when this plate was plugged") # necessary for fiber mapping fixes
+    iplateinput: int = Field(description="Plate input ID", default=-1)
+    pointing: int = Field(description="Pointing number", default=-1)
+    offset: int = Field(description="Offset value", default=-1)
+    block: int = Field(description="Block number", default=-1)
+    iguide: int = Field(description="Guide flag", default=-1)
+    bluefiber: int = Field(description="Blue fiber flag", default=-1)
+    chunk: int = Field(description="Chunk number", default=-1)
+    ifinal: int = Field(description="Final flag", default=-1)
+    plugged_mjd: int = Field(description="MJD when this plate was plugged", default=-1) # necessary for fiber mapping fixes
     fix_fiber_flag: int = Field(default=0, description="Whether this fiber mapping was fixed in software")
 
     # Physical properties
-    diameter: float = Field(description="Diameter")
-    buffer: float = Field(description="Buffer size")
-    priority: int = Field(description="Target priority")
-
-    @computed_field
-    def twomass_designation(self) -> str:
-        """ Convert a target ID to a standardized designation format. """
-        # The target_ids seem to be styled '2MASS-J...'
-        target_id = self.target_ids.strip()
-        target_id = target_id[5:] if target_id.startswith("2MASS") else target_id
-        target_id = str(target_id.lstrip("-Jdb_"))
-        return target_id
+    diameter: float = Field(default=-1, description="Diameter")
+    buffer: float = Field(default=-1, description="Buffer size")
+    priority: int = Field(default=-1, description="Target priority")
 
 
     @validator('hole_type', 'planned_hole_type', 'obj_type', pre=True)
@@ -89,6 +89,16 @@ class PlateTarget(BaseModel):
         validate_by_name = True
         validate_assignment = True
         arbitrary_types_allowed = True
+
+    @property
+    def expected_to_be_assigned_sdss_id(self) -> bool:
+        """ A helper function so we don't try to cross-match sky targets for SDSS IDs. """
+        return (
+            (self.catalogid > 0) | (self.twomass_designation != "")
+
+            and not self.category.startswith("sky_")
+            and self.category != ""
+        )
 
 
     @model_validator(mode="after")

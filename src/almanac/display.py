@@ -1,10 +1,17 @@
 import logging
+import numpy as np
+from itertools import cycle
 from datetime import datetime, timedelta
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
 from rich.text import Text
 from rich.align import Align
+from rich.table import Table as RichTable
+
+from almanac import config
+from almanac.data_models import Exposure
+from typing import Optional, List, Tuple, Dict, Any
 
 def mjd_to_datetime(mjd):
     """Convert MJD to datetime - mock implementation"""
@@ -319,3 +326,97 @@ class ObservationsDisplay:
             if grid_date.date() == date.date():
                 self.completed[observatory].add(i)
                 break
+
+
+def display_exposures(
+    exposures: List[Exposure],
+    sequences: Optional[Dict[str, List[Tuple[int, int]]]] = None,
+    console: Optional[Console] = None,
+    header_style: str = "bold cyan",
+    column_names: Optional[List[str]] = None,
+    sequence_styles: Tuple[str, ...] = ("green", "yellow"),
+    missing_style: str = "blink bold red",
+    title_style: str = "bold blue",
+) -> None:
+    """Display exposure information using Rich table formatting.
+
+    Args:
+        exposures: List of Exposure objects containing exposure data
+        sequences: Dictionary mapping sequence names to lists of (start, end) tuples (default: None)
+        console: Rich Console instance (default: None, creates new one)
+        header_style: Style for table headers (default: "bold cyan")
+        sequence_styles: Tuple of styles to cycle through for sequences (default: ("green", "yellow"))
+        missing_style: Style for missing/error entries (default: "red")
+        title_style: Style for the table title (default: "bold blue")
+    """
+    if console is None:
+        console = Console()
+
+    if len(exposures) == 0:
+        return
+
+    # Create the title
+    observatory, mjd = (exposures[0].observatory, exposures[0].mjd)
+    title = f"{len(exposures)} exposures from {observatory.upper()} on MJD {mjd}"
+
+    # Create Rich table
+    rich_table = RichTable(title=title, title_style=title_style, show_header=True, header_style=header_style)
+
+    field_names = config.display_field_names
+
+    for field_name in field_names:
+        rich_table.add_column(field_name, justify="center")
+
+    # Prepare sequence tracking
+    flattened_sequences = []
+    for k, v in (sequences or dict()).items():
+        flattened_sequences.extend(v)
+    flattened_sequences = np.array(flattened_sequences)
+
+    sequence_styles_cycle = cycle(sequence_styles)
+    in_sequence, current_sequence_style = (False, next(sequence_styles_cycle))
+
+    # Add rows to the table
+    for i, exposure in enumerate(exposures, start=1):
+        # Check if this row is part of a sequence
+        row_style = None
+        end_of_sequence = None
+        if len(flattened_sequences) > 0:
+            try:
+                j, k = np.where(flattened_sequences == i)
+            except:
+                pass
+            else:
+                # Could be start or end of sequence, and could be out of order
+                start_of_sequence = 0 in k
+                end_of_sequence = 1 in k
+
+                if start_of_sequence:
+                    in_sequence = True
+                    current_sequence_style = next(sequence_styles_cycle)
+                elif end_of_sequence:  # only end of sequence
+                    in_sequence = True
+
+        # Determine row style
+        if in_sequence:
+            row_style = current_sequence_style
+        else:
+            # Check if it's missing or has issues
+            if exposure.image_type == "missing":
+                row_style = missing_style
+
+        # Convert row data to strings and apply styling if needed
+        row_data = []
+        for field_name in field_names:
+            value = getattr(exposure, field_name)
+            if row_style:
+                row_data.append(Text(f"{value}", style=row_style))
+            else:
+                row_data.append(f"{value}")
+
+        rich_table.add_row(*row_data)
+        if end_of_sequence:
+            in_sequence = False
+
+    console.print(rich_table)
+    console.print()  # Add a blank line after the table

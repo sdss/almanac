@@ -8,10 +8,16 @@ from almanac import utils
 from almanac.config import config
 from almanac.logger import logger
 
-def match_planned_to_plugged(plate_hole_path, plug_map_path, tol=1e-5):
+def sanitise_twomass_designation(v):
+    # The target_ids seem to be styled '2MASS-J...'
+    v = str(v).strip()
+    v = v[5:] if v.startswith("2MASS") else v
+    v = str(v.lstrip("-Jdb_"))
+    if v.lower() == "na" or v == "None":
+        return ""
+    return v
 
-    planned = Table.read(plate_hole_path, format="yanny", tablename="STRUCT1")
-    plugged = Table.read(plug_map_path, format="yanny", tablename="PLUGMAPOBJ")
+def match_planned_to_plugged(planned, plugged, tol=1e-5):
 
     is_apogee = (
         (planned["holetype"] == "APOGEE")
@@ -38,24 +44,6 @@ def match_planned_to_plugged(plate_hole_path, plug_map_path, tol=1e-5):
 
     N = np.sum(n_matches_to_plugged_holes > 1)
     if N > 0:
-        logger.warning(
-            f"{N} plugged holes match multiple planned holes!\n"
-            f"\tPlanned holes: {plate_hole_path}\n"
-            f"\tPlugged holes: {plug_map_path}\n"
-        )
-        logger.warning(f"Following indices are all 1-indexed.")
-        for plugged_index in np.where(n_matches_to_plugged_holes > 1)[0]:
-            n = n_matches_to_plugged_holes[plugged_index]
-            logger.warning(
-                f"Plugged hole index {plugged_index + 1} "
-                f"(ra={plugged['ra'][plugged_index]:.5f}, dec={plugged['dec'][plugged_index]:.5f}) "
-                f"matches {n} planned holes within {tol:.1e}:"
-            )
-            for i, planned_index in enumerate(np.where(meets_tolerance[:, plugged_index])[0], start=1):
-                logger.warning(
-                    f"\t {i}. Planned hole index {planned_index + 1} matches coordinates (ra={planned['target_ra'][planned_index]:.5f}, dec={planned['target_dec'][planned_index]:.5f})"
-                )
-
         raise RuntimeError("Cannot uniquely match plugged holes to planned holes!")
 
     dist = np.sqrt(ra_dist**2 + dec_dist**2)

@@ -7,9 +7,7 @@ from astropy.table import Table
 from astropy.time import Time
 from astropy.io.registry import register_identifier, register_reader, register_writer
 from pydl.pydlutils.yanny import is_yanny, read_table_yanny, write_table_yanny
-from rich.console import Console
-from rich.table import Table as RichTable
-from rich.text import Text
+
 
 register_identifier("yanny", Table, is_yanny)
 register_reader("yanny", Table, read_table_yanny)
@@ -141,101 +139,3 @@ def parse_mjds(mjd: Optional[int], mjd_start: Optional[int], mjd_end: Optional[i
         return (range(mjd_start, 1 + mjd_end), mjd_start, mjd_end)
 
     raise RuntimeError("Should not be able to get here")
-
-
-def rich_display_exposures(
-    table: Table,
-    sequence_indices: Optional[Dict[str, np.ndarray]] = None,
-    console: Optional[Console] = None,
-    header_style: str = "bold cyan",
-    column_names: Optional[List[str]] = None,
-    sequence_styles: Tuple[str, ...] = ("green", "yellow"),
-    missing_style: str = "blink bold red",
-    title_style: str = "bold blue",
-) -> None:
-    """Display exposure information using Rich table formatting.
-
-    Args:
-        table: Astropy Table containing exposure data
-        sequence_indices: Dictionary mapping sequence names to index arrays (default: None)
-        console: Rich Console instance (default: None, creates new one)
-        header_style: Style for table headers (default: "bold cyan")
-        sequence_styles: Tuple of styles to cycle through for sequences (default: ("green", "yellow"))
-        missing_style: Style for missing/error entries (default: "red")
-        title_style: Style for the table title (default: "bold blue")
-    """
-    if console is None:
-        console = Console()
-
-    # Create the title
-    observatory, mjd = table["observatory"][0], table["mjd"][0]
-    title = f"{len(table)} exposures from {observatory.upper()} on MJD {mjd}"
-
-    # Create Rich table
-    rich_table = RichTable(title=title, title_style=title_style, show_header=True, header_style=header_style)
-
-    # Add columns based on the astropy table columns
-    if column_names is None:
-        column_names = table.colnames
-
-    for col_name in column_names:
-        rich_table.add_column(col_name, justify="center")
-
-    # Prepare sequence tracking
-    all_sequence_indices = []
-    for k, v in (sequence_indices or dict()).items():
-        all_sequence_indices.extend(v)
-    all_sequence_indices = np.array(all_sequence_indices)
-
-    sequence_styles_cycle = cycle(sequence_styles)
-    in_sequence, current_sequence_style = (False, next(sequence_styles_cycle))
-
-    # Add rows to the table
-    for i, row in enumerate(table):
-        # Check if this row is part of a sequence
-        row_style = None
-
-        if len(all_sequence_indices) > 0:
-            try:
-                j, k = np.where(all_sequence_indices == i)
-            except:
-                pass
-            else:
-                # Could be start or end of sequence, and could be out of order
-                start_of_sequence = 0 in k
-                end_of_sequence = 1 in k
-
-                if start_of_sequence:
-                    in_sequence = True
-                    current_sequence_style = next(sequence_styles_cycle)
-                elif end_of_sequence:  # only end of sequence
-                    in_sequence = False
-
-        # Determine row style
-        if in_sequence:
-            row_style = current_sequence_style
-        else:
-            # Check if it's missing or has issues
-            if not table["path_exists"][i]:
-                row_style = missing_style
-            else:
-                # Check if any field contains "Missing"
-                row_contains_missing = any(
-                    str(row[col]).find("Missing") > -1 for col in table.colnames
-                )
-                if row_contains_missing:
-                    row_style = missing_style
-
-        # Convert row data to strings and apply styling if needed
-        row_data = []
-        for col in column_names:
-            value = str(row[col])
-            if row_style:
-                row_data.append(Text(value, style=row_style))
-            else:
-                row_data.append(value)
-
-        rich_table.add_row(*row_data)
-
-    console.print(rich_table)
-    console.print()  # Add a blank line after the table

@@ -33,6 +33,25 @@ class Config:
     apogee_dir: str = "/uufs/chpc.utah.edu/common/home/sdss/sdsswork/data/apogee/"
     mapper_dir: str = "/uufs/chpc.utah.edu/common/home/sdss50/sdsswork/data/mapper/"
 
+
+    display_field_names: List[str] = field(
+        default_factory=lambda: [
+            "exposure",
+            "image_type",
+            "n_read",
+            "field_id",
+            "plate_id",
+            "config_id",
+            "design_id",
+            "dithered_pixels",
+            "lamp_quartz",
+            "lamp_thar",
+            "lamp_une",
+            "name",
+            "observer_comment"
+        ]
+    )
+
 def get_config_path():
     config_dir = Path.home() / ".almanac"
     config_dir.mkdir(exist_ok=True)
