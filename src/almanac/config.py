@@ -1,7 +1,6 @@
 import os
 import yaml
-import warnings
-from typing import List, Dict, Optional
+from typing import List, Dict
 from dataclasses import dataclass, field, is_dataclass, asdict
 from pathlib import Path
 
@@ -32,7 +31,7 @@ class Config:
     platelist_dir: str = "/uufs/chpc.utah.edu/common/home/sdss09/software/svn.sdss.org/data/sdss/platelist/trunk/plates/"
     sdsscore_dir: str = "/uufs/chpc.utah.edu/common/home/sdss50/software/git/sdss/sdsscore/main/"
     apogee_dir: str = "/uufs/chpc.utah.edu/common/home/sdss/sdsswork/data/apogee/"
-
+    mapper_dir: str = "/uufs/chpc.utah.edu/common/home/sdss50/sdsswork/data/mapper/"
 
 def get_config_path():
     config_dir = Path.home() / ".almanac"

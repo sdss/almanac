@@ -1,7 +1,7 @@
 import numpy as np
 from time import time
 from datetime import datetime
-from itertools import cycle
+from itertools import cycle, groupby
 from typing import Tuple, Union, Optional, List, Dict, Any
 from astropy.table import Table
 from astropy.time import Time
@@ -16,13 +16,21 @@ register_reader("yanny", Table, read_table_yanny)
 register_writer("yanny", Table, write_table_yanny)
 
 
+def group_contiguous(v):
+    groups = []
+    for k, g in groupby(enumerate(sorted(v)), lambda x: x[1] - x[0]):
+        group = list(map(lambda x: x[1], g))
+        groups.append((group[0], group[-1]))
+    return groups
+
+
 def get_observatories(apo: bool, lco: bool) -> Tuple[str, ...]:
     """Get observatory names based on boolean flags.
-    
+
     Args:
         apo: Whether to include APO observatory
         lco: Whether to include LCO observatory
-        
+
     Returns:
         Tuple of observatory names ("apo", "lco", or both)
     """
@@ -36,10 +44,10 @@ def get_observatories(apo: bool, lco: bool) -> Tuple[str, ...]:
 
 def timestamp_to_mjd(v: float) -> float:
     """Convert Unix timestamp to Modified Julian Date (MJD).
-    
+
     Args:
         v: Unix timestamp in seconds
-        
+
     Returns:
         Modified Julian Date as float
     """
@@ -48,7 +56,7 @@ def timestamp_to_mjd(v: float) -> float:
 
 def get_current_mjd() -> int:
     """Get current Modified Julian Date as integer.
-    
+
     Returns:
         Current MJD as integer
     """
@@ -57,10 +65,10 @@ def get_current_mjd() -> int:
 
 def datetime_to_mjd(date: str) -> int:
     """Convert date string to Modified Julian Date.
-    
+
     Args:
         date: Date string in format "YYYY-MM-DD"
-        
+
     Returns:
         Modified Julian Date as integer
     """
@@ -68,20 +76,20 @@ def datetime_to_mjd(date: str) -> int:
 
 def mjd_to_datetime(mjd: float) -> datetime:
     """Convert Modified Julian Date to datetime object.
-    
+
     Args:
         mjd: Modified Julian Date
-        
+
     Returns:
         Datetime object
     """
     return Time(mjd, format='mjd').datetime
 
-def parse_mjds(mjd: Optional[int], mjd_start: Optional[int], mjd_end: Optional[int], 
-               date: Optional[str], date_start: Optional[str], date_end: Optional[str], 
+def parse_mjds(mjd: Optional[int], mjd_start: Optional[int], mjd_end: Optional[int],
+               date: Optional[str], date_start: Optional[str], date_end: Optional[str],
                earliest_mjd: int = 0) -> Tuple[Union[int, range, Tuple[int, ...]], int, int]:
     """Parse MJD and date parameters to determine observation date range.
-    
+
     Args:
         mjd: Single MJD value (can be negative for relative to current)
         mjd_start: Start MJD for range (can be negative for relative to current)
@@ -90,13 +98,13 @@ def parse_mjds(mjd: Optional[int], mjd_start: Optional[int], mjd_end: Optional[i
         date_start: Start date string in "YYYY-MM-DD" format
         date_end: End date string in "YYYY-MM-DD" format
         earliest_mjd: Earliest allowed MJD value (default: 0)
-        
+
     Returns:
         Tuple containing:
             - MJD values (single int, range, or tuple)
             - Start MJD (int)
             - End MJD (int)
-            
+
     Raises:
         ValueError: If more than one time specification method is provided
         RuntimeError: If no valid time specification is found
@@ -146,7 +154,7 @@ def rich_display_exposures(
     title_style: str = "bold blue",
 ) -> None:
     """Display exposure information using Rich table formatting.
-    
+
     Args:
         table: Astropy Table containing exposure data
         sequence_indices: Dictionary mapping sequence names to index arrays (default: None)
@@ -158,37 +166,35 @@ def rich_display_exposures(
     """
     if console is None:
         console = Console()
-    
+
     # Create the title
     observatory, mjd = table["observatory"][0], table["mjd"][0]
     title = f"{len(table)} exposures from {observatory.upper()} on MJD {mjd}"
-    
+
     # Create Rich table
     rich_table = RichTable(title=title, title_style=title_style, show_header=True, header_style=header_style)
-    
+
     # Add columns based on the astropy table columns
     if column_names is None:
         column_names = table.colnames
 
     for col_name in column_names:
         rich_table.add_column(col_name, justify="center")
-    
+
     # Prepare sequence tracking
-    if sequence_indices is None:
-        all_sequence_indices = []
-    else:
-        all_sequence_indices = np.vstack(
-            [v for v in sequence_indices.values() if len(v) > 0]
-        )
-    
+    all_sequence_indices = []
+    for k, v in (sequence_indices or dict()).items():
+        all_sequence_indices.extend(v)
+    all_sequence_indices = np.array(all_sequence_indices)
+
     sequence_styles_cycle = cycle(sequence_styles)
     in_sequence, current_sequence_style = (False, next(sequence_styles_cycle))
-    
+
     # Add rows to the table
     for i, row in enumerate(table):
         # Check if this row is part of a sequence
         row_style = None
-        
+
         if len(all_sequence_indices) > 0:
             try:
                 j, k = np.where(all_sequence_indices == i)
@@ -219,7 +225,7 @@ def rich_display_exposures(
                 )
                 if row_contains_missing:
                     row_style = missing_style
-        
+
         # Convert row data to strings and apply styling if needed
         row_data = []
         for col in column_names:
@@ -228,8 +234,8 @@ def rich_display_exposures(
                 row_data.append(Text(value, style=row_style))
             else:
                 row_data.append(value)
-        
+
         rich_table.add_row(*row_data)
-    
+
     console.print(rich_table)
     console.print()  # Add a blank line after the table
