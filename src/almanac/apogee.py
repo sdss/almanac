@@ -6,13 +6,14 @@ from astropy.table import Table, hstack, unique
 from itertools import groupby
 from typing import Optional, Tuple, Dict, List, Set, Generator, Any, Union
 
-from almanac import config, logger, utils
 from scipy.spatial.distance import cdist
 
+from almanac import config, logger, utils
 from almanac.data_models import Exposure
+from almanac.data_models.types import ImageType
 from almanac.data_models.utils import mjd_to_exposure_prefix, get_exposure_path
 
-def get_unique_exposure_paths(paths: List[str]) -> List[Tuple[str, List[bool]]]:
+def get_unique_exposure_paths(paths: List[str]) -> List[str]:
     """
     Process a list of file paths to find unique exposures and determine which chips are available.
 
@@ -20,7 +21,7 @@ def get_unique_exposure_paths(paths: List[str]) -> List[Tuple[str, List[bool]]]:
         List of file paths to APOGEE exposure files.
 
     :returns:
-        List of tuples containing (path_to_exposure, list_of_chip_availability).
+        List of exposure paths.
     """
 
     chip_mapping = {}
@@ -94,7 +95,7 @@ def get_expected_number_of_exposures(observatory: str, mjd: int) -> int:
     except:
         return -1
 
-
+      
 def organize_exposures(exposures: List[Exposure]) -> List[Exposure]:
     """
     Identify any missing exposures (based on non-contiguous exposure numbers)
@@ -133,7 +134,7 @@ def organize_exposures(exposures: List[Exposure]) -> List[Exposure]:
     return organized
 
 
-def get_sequences(exposures: List[Exposure], image_type: str, fields: Tuple[str, ...]) -> List[Tuple[int, int]]:
+def get_sequences(exposures: List[Exposure], image_type: ImageType, fields: Tuple[str, ...]) -> List[Tuple[int, int]]:
     """
     Get exposure number ranges for sequences of a specific image type.
 
@@ -204,7 +205,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
         Tuple containing:
         - observatory name
         - MJD
-        - list of warning/info messages
+        - A list of exposures
         - Table of exposure data
         - dictionary of sequence indices
         - dictionary of fiber mappings

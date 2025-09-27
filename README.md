@@ -1,11 +1,37 @@
 ## almanac
-`almanac` scrapes headers from raw APOGEE exposures and cross-matches those with the SDSS database to create a comprehensive summary of everything ever observed with an APOGEE instrument.
+`almanac` scrapes headers from raw image files and cross-matches those against the SDSS database to create a comprehensive summary of everything ever observed with an APOGEE instrument.
+
+## Getting Started
+
+Here are a few example cases of how `almanac` might be helpful:
+
+List all exposures taken yesterday from either telescope:
+```bash
+almanac --mjd -1 -vv
+```
+
+Or just from Apache Point Observatory:
+```bash
+almanac --mjd -1 -vv --apo
+```
+
+Write out all exposures taken in the last month to `january.h5`:
+```bash
+almanac -o january.h5 --mjd-start -30
+```
+
+Write out all fiber observations during 2021, where we switched from plates to robotic fiber positioners:
+```bash
+almanac -vv --date-start 2021-01-01 --date-end 2021-31-12 --fibers
+```
+
+And it looks pretty, even when it warns you about missing exposures:
 
 ![](https://github.com/sdss/almanac/blob/83159e03632e3edbb45bb0c8de9810dec2dc49f1/docs/almanac-example-1.gif)
 
+
 ## Installation
 
-`almanac` needs local disk access to raw APOGEE data frames. 
 
 ### At Utah
 
@@ -19,6 +45,8 @@ module load almanac
 > We recommend you manage your own Python environment, but if you don't have one set up at Utah then you can use `module load miniconda/3.8.5_astra`. 
 
 ### Anywhere else
+
+`almanac` needs local disk access to raw APOGEE data frames. If you are going to run it somewhere else, you should set up a Globus transfer of raw APOGEE frames, and ensure your internet address is whitelisted to remotely access the SDSS database.
 
 We recommend using `uv` to manage Python environments. Using `uv`, you can install `almanac` with:
 ```bash
@@ -89,10 +117,10 @@ almanac --output /path/to/file.h5 # Append today's data to existing file
 An example structure of the HDF5 file is below:
 
 ```
-    apo/59300/exposures         # a data table of exposures
-    apo/59300/sequences         # a Nx2 array of exposure numbers (inclusive) that form a sequence
-    apo/59300/fibers/fps/1      # a data table of fiber mappings for FPS configuration id 1
-    apo/59300/fibers/plates/2   # a data table of fiber mappings for plate id 2
+apo/59300/exposures        # a data table of exposures
+apo/59300/sequences        # a Nx2 array of exposure numbers (inclusive) that form a sequence
+apo/59300/fibers/fps/1     # a data table of fiber mappings for FPS configuration id 1
+apo/59300/fibers/plates/2  # a data table of fiber mappings for plate id 2
 ```
 
 ## Configuration
