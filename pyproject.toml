@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdss-almanac"
-version = "0.2.2"
+version = "0.2.3"
 authors = [
     { name = "Andy Casey", email = "andrew.casey@monash.edu" }
 ]
@@ -33,7 +33,8 @@ dependencies = [
     "pydl",
     "sdssdb",
     "colorlog",
-    "rich"
+    "rich",
+    "pydantic"
 ]
 
 [project.urls]

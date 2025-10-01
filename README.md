@@ -50,7 +50,7 @@ module load almanac
 
 We recommend using `uv` to manage Python environments. Using `uv`, you can install `almanac` with:
 ```bash
-uv pip install git+https://github.com/sdss/almanac
+uv add sdss-almanac
 ```
 
 ## Usage
