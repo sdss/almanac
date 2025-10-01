@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sdss_almanac"
-version = "0.2.1"
+name = "sdss-almanac"
+version = "0.2.2"
 authors = [
     { name = "Andy Casey", email = "andrew.casey@monash.edu" }
 ]
