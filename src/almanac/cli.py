@@ -394,7 +394,11 @@ def stars(input_path, output_path, overwrite, format, **kwargs):
                     continue
 
                 for config_id, n_exposures in config_ids.items():
-                    config_group = group[f"fibers/{config_id}"]
+                    try:
+                        config_group = group[f"fibers/{config_id}"]
+                    except KeyError:
+                        print(f"Warning couldnt get config {config_id} for {observatory} {mjd}")
+                        continue
 
                     ok = (
                         (
