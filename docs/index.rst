@@ -62,7 +62,7 @@ Anywhere else
 
 .. code-block:: bash
 
-   uv pip install git+https://github.com/sdss/almanac
+   uv add sdss-almanac 
 
 Basic Usage
 -----------
