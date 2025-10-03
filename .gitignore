@@ -3,3 +3,7 @@ dist/
 __pycache__/
 *.egg-info/
 .vscode/
+
+.claude
+docs/_build/
+.gitignore
