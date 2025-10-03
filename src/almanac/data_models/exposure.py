@@ -121,7 +121,7 @@ class Exposure(BaseModel):
 
     @field_validator('lamp_quartz', 'lamp_thar', 'lamp_une', mode="before")
     def validate_lamps(cls, v):
-        return {'F': 0, 'T': 1}.get(str(v).strip().upper(), -1)
+        return {'F': 0, 'T': 1, '0': 0, '1': 1}.get(str(v).strip().upper(), -1)
 
     @model_validator(mode="after")
     def check_fields(self):
