@@ -28,6 +28,7 @@ ImageType = Literal[
 ]
 Category = Literal[
     "",
+    "bonus",
     "science",
     "sky_apogee",
     "sky_boss",
