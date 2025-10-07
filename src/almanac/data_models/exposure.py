@@ -299,7 +299,6 @@ class Exposure(BaseModel):
     @cached_property
     def targets(self) -> Tuple[Union[FPSTarget, PlateTarget]]:
         if self._targets is None:
-
             if (
                 (self.image_type == "object")
             &   (
@@ -309,9 +308,18 @@ class Exposure(BaseModel):
             ):
                 if self.fps:
                     factory = FPSTarget
-                    targets = self.fiber_map
-                    keep = (targets["fiberType"] == "APOGEE") & (targets["fiberId"] > 0)
-                    targets = targets[keep]
+                    rows = self.fiber_map
+                    keep = (rows["fiberType"] == "APOGEE") & (rows["fiberId"] > 0)
+                    rows = rows[keep]
+                    missing = set(range(1, 301)) - set(rows["fiberId"])
+                    for fiber_id in missing:
+                        rows.add_row({
+                            "fiberId": fiber_id,
+                            "racat": np.nan,
+                            "deccat": np.nan,
+                            "category": "unplugged",
+                        })
+                    rows.sort("fiberId")
                 else:
                     factory = PlateTarget
                     bad_exposure_notes = (
@@ -320,16 +328,16 @@ class Exposure(BaseModel):
                         .get("notes", None)
                     )
                     if bad_exposure_notes == "missing_plug_map_file":
-                        targets = []
+                        rows = []
                     else:
-                        targets = match_planned_to_plugged(self.plate_hole_map, self.plug_map)
-                        if targets:
+                        rows = match_planned_to_plugged(self.plate_hole_map, self.plug_map)
+                        if rows:
                             # Plugged MJD is necessary to understand where the fiber mapping
                             # went wrong in early plate era.
-                            targets["plugged_mjd"] = self.plugged_mjd
-                            targets["observatory"] = self.observatory
+                            rows["plugged_mjd"] = self.plugged_mjd
+                            rows["observatory"] = self.observatory
 
-                self._targets = tuple([factory(**r) for r in targets])
+                self._targets = tuple([factory(**r) for r in rows])
             else:
                 self._targets = tuple()
         return self._targets
