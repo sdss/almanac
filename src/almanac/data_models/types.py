@@ -33,7 +33,8 @@ Category = Literal[
     "sky_boss",
     "standard_apogee",
     "standard_boss",
-    "open_fiber"
+    "open_fiber",
+    "unplugged",
 ]
 
 HoleType = Literal[
@@ -56,7 +57,8 @@ HoleType = Literal[
     "apogee_south",
     "bosshalf",
     "boss_shared",
-    "fps"
+    "fps",
+    "unplugged",
 ]
 
 ObjType = Literal[

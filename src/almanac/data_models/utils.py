@@ -17,15 +17,32 @@ def sanitise_twomass_designation(v):
         return ""
     return v
 
-def match_planned_to_plugged(planned, plugged, tol=1e-5):
 
+def match_planned_to_plugged(planned, plugged, tol=1e-5, enforce_300=True):
+
+    unplugged_dict = {
+        "holeType": "unplugged",
+        "holetype": "unplugged",
+        "targettype": "unplugged",
+        "ra": np.nan,
+        "dec": np.nan,
+        "objType": "na",
+    }
     is_apogee = (
         (planned["holetype"] == "APOGEE")
     |   (planned["holetype"] == "APOGEE_SHARED")
     |   (planned["holetype"] == "APOGEE_SOUTH")
     )
-    if not any(is_apogee):
+    if not np.any(is_apogee) and not enforce_300:
         return []
+
+    elif not np.any(is_apogee):
+        rows = []
+        for i in range(1, 301):
+            unplugged_dict["fiberId"] = i
+            rows.append(unplugged_dict.copy())
+
+        return Table(rows=rows)
 
     planned = planned[is_apogee]
     plugged = plugged[plugged["spectrographId"] == 2]
@@ -50,7 +67,7 @@ def match_planned_to_plugged(planned, plugged, tol=1e-5):
     has_match = (n_matches_to_plugged_holes == 1)
     planned_hole_indices = np.argmin(dist[:, has_match], axis=0)
 
-    return hstack(
+    rows = hstack(
         [
             plugged[has_match],
             planned[planned_hole_indices]
@@ -59,6 +76,12 @@ def match_planned_to_plugged(planned, plugged, tol=1e-5):
         uniq_col_name="{table_name}{col_name}",
         table_names=("", "planned_")
     )
+    if enforce_300 and len(rows) != 300:
+        for fiber_id in (set(range(1, 301)) - set(rows["fiberId"])):
+            rows.add_row({"fiberId": fiber_id, **unplugged_dict })
+        rows.sort("fiberId")
+
+    return rows
 
 
 def get_headers(path, head=20_000):
