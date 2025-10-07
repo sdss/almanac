@@ -79,7 +79,13 @@ class Exposure(BaseModel):
 
     @computed_field
     def flagged_bad(self) -> bool:
-        return (self.observatory, self.mjd, self.exposure) in lookup_bad_exposures
+        marked_bad = (self.observatory, self.mjd, self.exposure) in lookup_bad_exposures
+        missing_plate_info = (
+            (self.image_type == "object")
+        &   ((self.fps and self.config_id <= 0) or (not self.fps and self.plate_id <= 0))
+        )
+        return marked_bad or missing_plate_info
+
 
     @computed_field
     def chip_flags(self) -> int:
@@ -317,7 +323,7 @@ class Exposure(BaseModel):
                             "fiberId": fiber_id,
                             "racat": np.nan,
                             "deccat": np.nan,
-                            "category": "unplugged",
+                            "category": "bonus",
                         })
                     rows.sort("fiberId")
                 else:
