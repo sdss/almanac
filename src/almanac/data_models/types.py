@@ -4,11 +4,40 @@ from typing_extensions import Annotated
 from pydantic import BeforeValidator
 
 def validate_np_int64(v):
+    if v is None:
+        return np.int64(-1)
     if not isinstance(v, np.int64):
         return np.int64(v)
     return v
 
+def validate_int(v):
+    if v is None:
+        return -1
+    return int(v)
+
+def validate_float(v):
+    if v is None:
+        return float('nan')
+    try:
+        return float(v)
+    except (ValueError, TypeError):
+        return float('nan')
+
+def validate_str(v):
+    if v is None:
+        return ""
+    return str(v)
+
+def validate_bool(v):
+    if v is None:
+        return False
+    return bool(v)
+
 Int64 = Annotated[np.int64, BeforeValidator(validate_np_int64)]
+Int = Annotated[int, BeforeValidator(validate_int)]
+Float = Annotated[float, BeforeValidator(validate_float)]
+Str = Annotated[str, BeforeValidator(validate_str)]
+Bool = Annotated[bool, BeforeValidator(validate_bool)]
 
 
 Observatory = Literal["apo", "lco"]
