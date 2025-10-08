@@ -383,10 +383,10 @@ def update(key, value, **kwargs):
     click.echo(click.style("Deprecated: use `almanac config set`", fg="yellow"))
     return set(key, value, **kwargs)
 
-@config.command
+@config.command(name="set")
 @click.argument("key")
 @click.argument("value")
-def set(key, value, **kwargs):
+def _set(key, value, **kwargs):
     """Set a configuration value"""
 
     from almanac import config, get_config_path, ConfigManager
