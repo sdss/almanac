@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdss-almanac"
-version = "0.2.8"
+version = "0.2.9"
 authors = [
     { name = "Andy Casey", email = "andrew.casey@monash.edu" }
 ]
 description = "Everything we've got"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 license = { text = "BSD 3-Clause License" }
 keywords = ["astronomy", "software"]
 classifiers = [
