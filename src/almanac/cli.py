@@ -41,7 +41,7 @@ def main(
 
     # This keeps the default behaviour as 'query mode' but allows for commands like 'config'.
     if ctx.invoked_subcommand is not None:
-        command = dict(config=config, dump=dump)[ctx.invoked_subcommand]
+        command = dict(config=config, dump=dump, add=add)[ctx.invoked_subcommand]
         return ctx.invoke(command, **ctx.params)
 
     import h5py as h5
@@ -197,6 +197,94 @@ def main(
             logger.critical(item)
 
 @main.group()
+def add(**kwargs):
+    """Add new information to an existing Almanac file."""
+    pass
+
+@add.command()
+@click.argument("input_path", type=str)
+@click.option("--mjd", default=None, type=int, help="Modified Julian Date")
+@click.option("--apo", is_flag=True, help="Apache Point Observatory")
+@click.option("--lco", is_flag=True, help="Las Campanas Observatory")
+def metadata(input_path, mjd, apo, lco, **kwargs):
+    """Add photometry and astrometry to an existing Almanac file."""
+
+    import numpy as np
+    from almanac import utils
+    from almanac.catalog import query_catalog
+
+    observatories = utils.get_observatories(apo, lco)
+
+    # Open the input file and get all possible sdss_ids
+    import h5py as h5
+    from tqdm import tqdm
+    with h5.File(input_path, "r+") as fp:
+        sdss_ids = dict()
+
+        if mjd is None:
+            total = sum([len(fp[obs].keys()) for obs in observatories])
+        else:
+            total = 1 * len(observatories)
+
+        with tqdm(total=total, desc="Collecting SDSS identifiers") as pb:
+            for observatory in observatories:
+                if observatory not in fp:
+                    continue
+
+                mjds = fp[observatory].keys() if mjd is None else [str(mjd)]
+
+                for mjd in mjds:
+                    if mjd not in fp[observatory]:
+                        continue
+                    group = fp[f"{observatory}/{mjd}"]
+                    if "fibers" not in group:
+                        continue
+                    for config_id in group["fibers"]:
+                        config_group = group[f"fibers/{config_id}"]
+
+                        if "source_id" in config_group:
+                            continue
+
+                        dtypes = dict(
+                            sdss_id=(np.int64, -1),
+                            source_id=(np.int64, -1),
+                            ra=(float, np.nan),
+                            dec=(float, np.nan),
+                            parallax=(float, np.nan),
+                            radial_velocity=(float, np.nan),
+                            radial_velocity_error=(float, np.nan),
+                            bp_rp=(float, np.nan),
+                            bp_g=(float, np.nan),
+                            g_rp=(float, np.nan),
+                            designation=(None, ""),
+                            j_m=(float, np.nan),
+                            h_m=(float, np.nan),
+                            k_m=(float, np.nan),
+                        )
+
+                        n = len(config_group["sdss_id"][:])
+                        metadata = {k: [v[1]] * n for k, v in dtypes.items()}
+                        for i, row in enumerate(query_catalog(list(config_group["sdss_id"][:]))):
+                            for key in row.keys():
+                                metadata[key][i] = row[key]
+
+                        # match to existing sdss_id
+                        new_id = np.argsort(np.argsort(config_group["sdss_id"][:]))
+                        indices = np.argsort(metadata["sdss_id"])[new_id]
+
+                        for key, values in metadata.items():
+                            if key in config_group:
+                                continue
+                            dtype, default = dtypes[key]
+                            values = np.array([v or default for v in values], dtype=dtype)[indices]
+                            if key == "designation":
+                                values = list(map(str, values))
+                            config_group.create_dataset(key, data=values, dtype=dtype)
+                            print(f"Created {observatory}/{mjd}/fibers/{config_id}/{key}")
+                    pb.update(1)
+
+
+@main.group()
 def config(**kwargs):
     """View or update configuration settings."""
     pass
@@ -259,11 +347,19 @@ def get(key, **kwargs):
     click.echo(value)
 
 
-@config.command
+@config.command(hidden=True)
 @click.argument("key")
 @click.argument("value")
 def update(key, value, **kwargs):
     """Update a configuration value"""
+    click.echo(click.style("Deprecated: use `almanac config set`", fg="yellow"))
+    return set(key, value, **kwargs)
+
+@config.command
+@click.argument("key")
+@click.argument("value")
+def set(key, value, **kwargs):
+    """Set a configuration value"""
 
     from almanac import config, get_config_path, ConfigManager
     from dataclasses import asdict, is_dataclass
