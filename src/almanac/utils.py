@@ -83,9 +83,16 @@ def mjd_to_datetime(mjd: float) -> datetime:
     """
     return Time(mjd, format='mjd').datetime
 
-def parse_mjds(mjd: Optional[int], mjd_start: Optional[int], mjd_end: Optional[int],
-               date: Optional[str], date_start: Optional[str], date_end: Optional[str],
-               earliest_mjd: int = 0) -> Tuple[Union[int, range, Tuple[int, ...]], int, int]:
+def parse_mjds(
+    mjd: Optional[int],
+    mjd_start: Optional[int],
+    mjd_end: Optional[int],
+    date: Optional[str],
+    date_start: Optional[str],
+    date_end: Optional[str],
+    earliest_mjd: int = 0,
+    return_nones: bool = False
+) -> Tuple[Union[int, range, Tuple[int, ...]], int, int]:
     """Parse MJD and date parameters to determine observation date range.
 
     Args:
@@ -96,6 +103,7 @@ def parse_mjds(mjd: Optional[int], mjd_start: Optional[int], mjd_end: Optional[i
         date_start: Start date string in "YYYY-MM-DD" format
         date_end: End date string in "YYYY-MM-DD" format
         earliest_mjd: Earliest allowed MJD value (default: 0)
+        return_nones: If True, return None for mjd range if no dates are specified (default: False)
 
     Returns:
         Tuple containing:
@@ -117,7 +125,10 @@ def parse_mjds(mjd: Optional[int], mjd_start: Optional[int], mjd_end: Optional[i
             "Cannot specify more than one of --mjd, --mjd-start/--mjd-end, --date, --date-start/--date-end"
         )
     if n_given == 0:
-        return ((current_mjd, ), current_mjd, current_mjd)
+        if return_nones:
+            return (None, None, None)
+        else:
+            return ((current_mjd, ), current_mjd, current_mjd)
     if mjd is not None:
         if mjd < 0:
             mjd += current_mjd

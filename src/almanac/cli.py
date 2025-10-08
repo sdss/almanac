@@ -203,29 +203,58 @@ def add(**kwargs):
 
 @add.command()
 @click.argument("input_path", type=str)
-@click.option("--mjd", default=None, type=int, help="Modified Julian Date")
-@click.option("--apo", is_flag=True, help="Apache Point Observatory")
-@click.option("--lco", is_flag=True, help="Las Campanas Observatory")
-def metadata(input_path, mjd, apo, lco, **kwargs):
-    """Add photometry and astrometry to an existing Almanac file."""
+@click.option("--mjd", default=None, type=int, help="Modified Julian date to query. Use negative values to indicate relative to current MJD")
+@click.option("--mjd-start", default=None, type=int, help="Start of MJD range to query")
+@click.option("--mjd-end", default=None, type=int, help="End of MJD range to query")
+@click.option("--date", default=None, type=str, help="Date to query (e.g., 2024-01-15)")
+@click.option("--date-start", default=None, type=str, help="Start of date range to query")
+@click.option("--date-end", default=None, type=str, help="End of date range to query")
+@click.option("--apo", is_flag=True, help="Query Apache Point Observatory data")
+@click.option("--lco", is_flag=True, help="Query Las Campanas Observatory data")
+def metadata(input_path, mjd, mjd_start, mjd_end, date, date_start, date_end, apo, lco, **kwargs):
+    """Add astrometry and photometry to an existing Almanac file."""
 
     import numpy as np
+    import h5py as h5
+    from itertools import product
     from almanac import utils
     from almanac.catalog import query_catalog
+    from almanac.data_models.metadata import SourceMetadata
+    from tqdm import tqdm
 
     observatories = utils.get_observatories(apo, lco)
+    mjds, *_ = utils.parse_mjds(
+        mjd, mjd_start, mjd_end, date, date_start, date_end, return_nones=True
+    )
 
-    # Open the input file and get all possible sdss_ids
-    import h5py as h5
-    from tqdm import tqdm
-    with h5.File(input_path, "r+") as fp:
-        sdss_ids = dict()
+    sdss_ids = set()
+    with h5.File(input_path, "r") as fp:
+        if mjds is None:
+            mjds = []
+            for obs in observatories:
+                mjds.extend(fp[obs])
+            mjds = list(set(mjds))
+
+        for mjd, obs in product(mjds, observatories):
+            group = fp.get(f"{obs}/{mjd}/fibers", [])
+            for config in group:
+                if "source_id" in group[config]:
+                    continue
+                sdss_ids.update(group[config]["sdss_id"][:])
+
+    v = []
+    for row in tqdm(query_catalog(sdss_ids), total=len(sdss_ids)):
+        v.append(row)
+
+
+
 
         if mjd is None:
             total = sum([len(fp[obs].keys()) for obs in observatories])
         else:
             total = 1 * len(observatories)
 
+        sdss_ids = dict()
         with tqdm(total=total, desc="Collecting SDSS identifiers") as pb:
             for observatory in observatories:
                 if observatory not in fp:
@@ -234,11 +263,10 @@ def metadata(input_path, mjd, apo, lco, **kwargs):
                 mjds = fp[observatory].keys() if mjd is None else [str(mjd)]
 
                 for mjd in mjds:
-                    if mjd not in fp[observatory]:
-                        continue
                     group = fp[f"{observatory}/{mjd}"]
                     if "fibers" not in group:
                         continue
+
                     for config_id in group["fibers"]:
                         config_group = group[f"fibers/{config_id}"]
 
