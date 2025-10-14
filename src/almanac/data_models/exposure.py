@@ -77,6 +77,13 @@ class Exposure(BaseModel):
     #def sparse_pak(self) -> bool:
     #    return "sparse" in self.observer_comment.lower()
 
+    def __str__(self):
+        return (
+            f"<Exposure(observatory={self.observatory},"
+            f" mjd={self.mjd}, exposure={self.exposure},"
+            f" image_type={self.image_type})>"
+        )
+
     @computed_field
     def flagged_bad(self) -> bool:
         marked_bad = (self.observatory, self.mjd, self.exposure) in lookup_bad_exposures
@@ -342,8 +349,11 @@ class Exposure(BaseModel):
                             # went wrong in early plate era.
                             rows["plugged_mjd"] = self.plugged_mjd
                             rows["observatory"] = self.observatory
-
-                self._targets = tuple([factory(**r) for r in rows])
+                try:
+                    self._targets = tuple([factory(**r) for r in rows])
+                except Exception as e:
+                    e.add_note(f"Originated from {self}")
+                    raise
             else:
                 self._targets = tuple()
         return self._targets
