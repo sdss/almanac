@@ -49,7 +49,7 @@ class PlateTarget(BaseModel):
 
     # Instrument identifiers
     spectrograph_id: int = Field(alias="spectrographId", description="Spectrograph ID", default=-1)
-    fiber_id: int = Field(alias="fiberId", description="Fiber ID", default=-1)
+    fiber_id: int = Field(alias="fiberId", description="Fiber ID", ge=1, le=300)
     planned_fiber_id: int = Field(alias="fiberid", description="Fiber ID", default=-1)
     throughput: int = Field(description="Throughput value", default=-1)
 
@@ -137,6 +137,12 @@ class PlateTarget(BaseModel):
                         break
 
                 if self.fiber_id in (53, 60):
-                    self.fiber_id = -1  # unpopulated fiber
+                    # The DRP indicates that these are unpopulated fibers.
+                    self.hole_type = "unplugged"
+                    self.category = "unplugged"
+                    self.planned_hole_type = "unplugged"
+                    self.ra = np.nan
+                    self.dec = np.nan
+                    self.obj_type = "na"
 
         return self
