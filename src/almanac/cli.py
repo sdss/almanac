@@ -225,22 +225,33 @@ def lookup(identifier, careful, **kwargs):
     from rich.console import Console
     from rich.live import Live
 
-    identifiers = (
+    sq = (
         SDSS_ID_flat
-        .select(
-            SDSS_ID_flat.catalogid,
-            SDSS_ID_flat.sdss_id,
-        )
+        .select(SDSS_ID_flat.sdss_id)
         .where(
             (SDSS_ID_flat.sdss_id == identifier)
         |   (SDSS_ID_flat.catalogid == identifier)
         )
+        .alias("sq")
+    )
+    q = (
+        SDSS_ID_flat
+        .select(SDSS_ID_flat.catalogid, SDSS_ID_flat.sdss_id)
+        .distinct()
+        .join(sq, on=(SDSS_ID_flat.sdss_id == sq.c.sdss_id))
         .tuples()
     )
 
-    identifiers = { catalogid: sdss_id for catalogid, sdss_id in identifiers }
-    if not identifiers:
+    sdss_ids, catalogids = (set(), [])
+    for catalogid, sdss_id in q:
+        sdss_ids.add(sdss_id)
+        catalogids.append(catalogid)
+
+    if not catalogids:
         raise click.ClickException(f"Identifier {identifier} not found in SDSS-V database")
+
+    if len(sdss_ids) != 1:
+        raise click.ClickException(f"Identifier {identifier} is ambiguous and matches multiple SDSS IDs: {', '.join(map(str, sdss_ids))}")
 
     q = (
         Target
@@ -255,7 +266,7 @@ def lookup(identifier, careful, **kwargs):
         .join(Hole)
         .join(Observatory)
         .where(
-            Target.catalogid.in_(tuple(identifiers.keys()))
+            Target.catalogid.in_(tuple(catalogids))
         &   (AssignmentStatus.status == 1)
         )
         .tuples()
@@ -264,23 +275,25 @@ def lookup(identifier, careful, **kwargs):
 
     console = Console()
 
-    title = "; ".join([f"SDSS ID {sdss_id} / Catalog ID {catalogid}" for catalogid, sdss_id in identifiers.items()])
+    title = f"SDSS ID {sdss_id}"
 
     # Create Rich table
     rich_table = RichTable(title=f"{title}", title_style="bold blue", show_header=True, header_style="bold cyan")
 
-    for field_name in ("obs", "mjd", "exposure", "field", "fiber_id", "catalogid"):
+    for field_name in ("#", "obs", "mjd", "exposure", "field", "fiber_id", "catalogid"):
         rich_table.add_column(field_name, justify="center")
 
     fields = {}
-    with Live(rich_table, console=console, refresh_per_second=4, screen=False) as live:
+    i = 1
+    with Live(rich_table, console=console, refresh_per_second=4) as live:
         for exposure in chain(*starmap(get_exposures, q)):
             key = (exposure.observatory, exposure.mjd)
             if (key not in fields or fields[key] == exposure.field_id) or careful:
                 for target in exposure.targets:
-                    if target.catalogid in identifiers:
+                    if target.catalogid in catalogids:
                         fields[key] = exposure.field_id
                         rich_table.add_row(*list(map(str, (
+                            i,
                             exposure.observatory,
                             exposure.mjd,
                             exposure.exposure,
@@ -288,7 +301,9 @@ def lookup(identifier, careful, **kwargs):
                             target.fiber_id,
                             target.catalogid
                         ))))
+                        i += 1
                         break
+
 
 @main.group()
 def add(**kwargs):
