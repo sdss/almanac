@@ -41,7 +41,12 @@ def main(
 
     # This keeps the default behaviour as 'query mode' but allows for commands like 'config'.
     if ctx.invoked_subcommand is not None:
-        command = dict(config=config, dump=dump, add=add)[ctx.invoked_subcommand]
+        command = dict(
+            config=config,
+            dump=dump,
+            add=add,
+            lookup=lookup
+        )[ctx.invoked_subcommand]
         return ctx.invoke(command, **ctx.params)
 
     import h5py as h5
@@ -195,6 +200,95 @@ def main(
     # Show critical logs at the end to avoid disrupting the display
         for item in buffered_critical_logs:
             logger.critical(item)
+
+
+@main.command()
+@click.argument("identifier", type=int)
+@click.option("--careful", is_flag=True, help="Don't assume unique field for a given (obs, mjd, catalogid)")
+def lookup(identifier, careful, **kwargs):
+    """Lookup a target by catalog identifier or SDSS identifier."""
+
+    if not identifier:
+        return
+
+    from peewee import fn
+    from itertools import chain, starmap
+    from almanac.database import database
+    from almanac.apogee import get_exposures
+    from sdssdb.peewee.sdss5db.targetdb import (
+        Assignment, AssignmentStatus,CartonToTarget, Target, Hole, Observatory,
+        Design, DesignToField
+    )
+    from sdssdb.peewee.sdss5db.catalogdb import SDSS_ID_flat
+
+    from rich.table import Table as RichTable
+    from rich.console import Console
+    from rich.live import Live
+
+    identifiers = (
+        SDSS_ID_flat
+        .select(
+            SDSS_ID_flat.catalogid,
+            SDSS_ID_flat.sdss_id,
+        )
+        .where(
+            (SDSS_ID_flat.sdss_id == identifier)
+        |   (SDSS_ID_flat.catalogid == identifier)
+        )
+        .tuples()
+    )
+
+    identifiers = { catalogid: sdss_id for catalogid, sdss_id in identifiers }
+    if not identifiers:
+        raise click.ClickException(f"Identifier {identifier} not found in SDSS-V database")
+
+    q = (
+        Target
+        .select(
+            fn.Lower(Observatory.label),
+            AssignmentStatus.mjd,
+        )
+        .join(CartonToTarget)
+        .join(Assignment)
+        .join(AssignmentStatus)
+        .switch(Assignment)
+        .join(Hole)
+        .join(Observatory)
+        .where(
+            Target.catalogid.in_(tuple(identifiers.keys()))
+        &   (AssignmentStatus.status == 1)
+        )
+        .tuples()
+    )
+    q = tuple(set([(obs, int(mjd)) for obs, mjd in q]))
+
+    console = Console()
+
+    title = "; ".join([f"SDSS ID {sdss_id} / Catalog ID {catalogid}" for catalogid, sdss_id in identifiers.items()])
+
+    # Create Rich table
+    rich_table = RichTable(title=f"{title}", title_style="bold blue", show_header=True, header_style="bold cyan")
+
+    for field_name in ("obs", "mjd", "exposure", "field", "fiber_id", "catalogid"):
+        rich_table.add_column(field_name, justify="center")
+
+    fields = {}
+    with Live(rich_table, console=console, refresh_per_second=4, screen=False) as live:
+        for exposure in chain(*starmap(get_exposures, q)):
+            key = (exposure.observatory, exposure.mjd)
+            if (key not in fields or fields[key] == exposure.field_id) or careful:
+                for target in exposure.targets:
+                    if target.catalogid in identifiers:
+                        fields[key] = exposure.field_id
+                        rich_table.add_row(*list(map(str, (
+                            exposure.observatory,
+                            exposure.mjd,
+                            exposure.exposure,
+                            exposure.field_id,
+                            target.fiber_id,
+                            target.catalogid
+                        ))))
+                        break
 
 @main.group()
 def add(**kwargs):
