@@ -277,15 +277,16 @@ def lookup(identifier, careful, **kwargs):
         )
         .tuples()
     )
-    fields = {}
+    n, fields = (0, {})
     for obs, mjd, field_id in q:
         mjd = int(mjd)
         fields.setdefault((obs, mjd), set())
         fields[(obs, mjd)].add(field_id)
+        n += 1
 
     console = Console()
 
-    title = f"SDSS ID {sdss_id}"
+    title = f"SDSS ID {sdss_id}\n({n} obs/mjd/field combinations)"
 
     rich_table = RichTable(
         title=f"{title}",
