@@ -203,12 +203,11 @@ def main(
 
 
 @main.command()
-@click.argument("identifier", type=int)
-@click.option("--careful", is_flag=True, help="Don't assume unique field for a given (obs, mjd, catalogid)")
-def lookup(identifier, careful, **kwargs):
-    """Lookup a target by catalog identifier or SDSS identifier."""
+@click.argument("identifiers", type=int, nargs=-1)
+def lookup(identifiers, **kwargs):
+    """Lookup target(s) by catalog or SDSS identifier."""
 
-    if not identifier:
+    if not identifiers:
         return
 
     from peewee import fn
@@ -229,8 +228,8 @@ def lookup(identifier, careful, **kwargs):
         SDSS_ID_flat
         .select(SDSS_ID_flat.sdss_id)
         .where(
-            (SDSS_ID_flat.sdss_id == identifier)
-        |   (SDSS_ID_flat.catalogid == identifier)
+            (SDSS_ID_flat.sdss_id.in_(identifiers))
+        |   (SDSS_ID_flat.catalogid.in_(identifiers))
         )
         .alias("sq")
     )
@@ -239,19 +238,14 @@ def lookup(identifier, careful, **kwargs):
         .select(SDSS_ID_flat.catalogid, SDSS_ID_flat.sdss_id)
         .distinct()
         .join(sq, on=(SDSS_ID_flat.sdss_id == sq.c.sdss_id))
+        .order_by(SDSS_ID_flat.sdss_id.asc())
         .tuples()
     )
 
-    sdss_ids, catalogids = (set(), [])
-    for catalogid, sdss_id in q:
-        sdss_ids.add(sdss_id)
-        catalogids.append(catalogid)
+    catalogids = { catalogid: sdss_id for catalogid, sdss_id in q }
 
     if not catalogids:
-        raise click.ClickException(f"Identifier {identifier} not found in SDSS-V database")
-
-    if len(sdss_ids) != 1:
-        raise click.ClickException(f"Identifier {identifier} is ambiguous and matches multiple SDSS IDs: {', '.join(map(str, sdss_ids))}")
+        raise click.ClickException(f"Identifiers {identifiers} not found in SDSS-V database")
 
     q = (
         Target
@@ -272,7 +266,7 @@ def lookup(identifier, careful, **kwargs):
         .join(DesignToField)
         .join(Field)
         .where(
-            Target.catalogid.in_(tuple(catalogids))
+            Target.catalogid.in_(tuple(catalogids.keys()))
         &   (AssignmentStatus.status == 1)
         )
         .tuples()
@@ -286,16 +280,14 @@ def lookup(identifier, careful, **kwargs):
 
     console = Console()
 
-    title = f"SDSS ID {sdss_id}\n({n} obs/mjd/field combinations)"
-
     rich_table = RichTable(
-        title=f"{title}",
+        title=f"Exposures\n({n} obs/mjd/field combinations)",
         title_style="bold blue",
         show_header=True,
         header_style="bold cyan"
     )
 
-    for field_name in ("#", "obs", "mjd", "exposure", "field", "fiber_id", "catalogid"):
+    for field_name in ("#", "obs", "mjd", "exposure", "field", "fiber_id", "catalogid", "sdss_id"):
         rich_table.add_column(field_name, justify="center")
 
     i = 1
@@ -312,7 +304,8 @@ def lookup(identifier, careful, **kwargs):
                             exposure.exposure,
                             exposure.field_id,
                             target.fiber_id,
-                            target.catalogid
+                            target.catalogid,
+                            catalogids[target.catalogid],
                         ))))
                         i += 1
                         break
