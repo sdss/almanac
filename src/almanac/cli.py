@@ -217,7 +217,7 @@ def lookup(identifier, careful, **kwargs):
     from almanac.apogee import get_exposures
     from sdssdb.peewee.sdss5db.targetdb import (
         Assignment, AssignmentStatus,CartonToTarget, Target, Hole, Observatory,
-        Design, DesignToField
+        Design, DesignToField, Field
     )
     from sdssdb.peewee.sdss5db.catalogdb import SDSS_ID_flat
 
@@ -258,40 +258,52 @@ def lookup(identifier, careful, **kwargs):
         .select(
             fn.Lower(Observatory.label),
             AssignmentStatus.mjd,
+            Field.field_id,
         )
+        .distinct()
         .join(CartonToTarget)
         .join(Assignment)
         .join(AssignmentStatus)
         .switch(Assignment)
         .join(Hole)
         .join(Observatory)
+        .switch(Assignment)
+        .join(Design)
+        .join(DesignToField)
+        .join(Field)
         .where(
             Target.catalogid.in_(tuple(catalogids))
         &   (AssignmentStatus.status == 1)
         )
         .tuples()
     )
-    q = tuple(set([(obs, int(mjd)) for obs, mjd in q]))
+    fields = {}
+    for obs, mjd, field_id in q:
+        mjd = int(mjd)
+        fields.setdefault((obs, mjd), set())
+        fields[(obs, mjd)].add(field_id)
 
     console = Console()
 
     title = f"SDSS ID {sdss_id}"
 
-    # Create Rich table
-    rich_table = RichTable(title=f"{title}", title_style="bold blue", show_header=True, header_style="bold cyan")
+    rich_table = RichTable(
+        title=f"{title}",
+        title_style="bold blue",
+        show_header=True,
+        header_style="bold cyan"
+    )
 
     for field_name in ("#", "obs", "mjd", "exposure", "field", "fiber_id", "catalogid"):
         rich_table.add_column(field_name, justify="center")
 
-    fields = {}
     i = 1
     with Live(rich_table, console=console, refresh_per_second=4) as live:
-        for exposure in chain(*starmap(get_exposures, q)):
-            key = (exposure.observatory, exposure.mjd)
-            if (key not in fields or fields[key] == exposure.field_id) or careful:
+        for exposure in chain(*starmap(get_exposures, fields.keys())):
+            field_ids = fields[(exposure.observatory, exposure.mjd)]
+            if exposure.field_id in field_ids:
                 for target in exposure.targets:
                     if target.catalogid in catalogids:
-                        fields[key] = exposure.field_id
                         rich_table.add_row(*list(map(str, (
                             i,
                             exposure.observatory,
