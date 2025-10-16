@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdss-almanac"
-version = "0.3.3"
+version = "0.3.4"
 authors = [
     { name = "Andy Casey", email = "andrew.casey@monash.edu" }
 ]

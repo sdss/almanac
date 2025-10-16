@@ -204,16 +204,20 @@ def main(
 
 @main.command()
 @click.argument("identifiers", type=int, nargs=-1)
-def lookup(identifiers, **kwargs):
+@click.option("--output", "-O", default=None, type=str, help="Output file")
+def lookup(identifiers, output, **kwargs):
     """Lookup target(s) by catalog or SDSS identifier."""
 
     if not identifiers:
         return
 
+    import h5py as h5
+    from contextlib import nullcontext
     from peewee import fn
     from itertools import chain, starmap
+    from almanac import io
     from almanac.database import database
-    from almanac.apogee import get_exposures
+    from almanac.apogee import get_exposures, get_almanac_data
     from sdssdb.peewee.sdss5db.targetdb import (
         Assignment, AssignmentStatus,CartonToTarget, Target, Hole, Observatory,
         Design, DesignToField, Field
@@ -246,6 +250,20 @@ def lookup(identifiers, **kwargs):
 
     if not catalogids:
         raise click.ClickException(f"Identifiers {identifiers} not found in SDSS-V database")
+
+    # todo hacky
+    for m in (
+        Target, Observatory, AssignmentStatus, Field, CartonToTarget,
+        Assignment, Hole, Design, DesignToField
+    ):
+        try:
+            m.get()
+        except:
+            print(f"Failed {m}")
+        else:
+            print(f"Success {m}")
+
+        m._meta.schema = "targetdb"
 
     q = (
         Target
@@ -290,26 +308,40 @@ def lookup(identifiers, **kwargs):
     for field_name in ("#", "obs", "mjd", "exposure", "field", "fiber_id", "catalogid", "sdss_id"):
         rich_table.add_column(field_name, justify="center")
 
-    i = 1
-    with Live(rich_table, console=console, refresh_per_second=4) as live:
-        for exposure in chain(*starmap(get_exposures, fields.keys())):
-            field_ids = fields[(exposure.observatory, exposure.mjd)]
-            if exposure.field_id in field_ids:
-                for target in exposure.targets:
-                    if target.catalogid in catalogids:
-                        rich_table.add_row(*list(map(str, (
-                            i,
-                            exposure.observatory,
-                            exposure.mjd,
-                            exposure.exposure,
-                            exposure.field_id,
-                            target.fiber_id,
-                            target.catalogid,
-                            catalogids[target.catalogid],
-                        ))))
-                        i += 1
-                        break
+    done = set()
+    io_kwds = dict(fibers=True, compression=False)
+    with (h5.File(output, "a") if output else nullcontext()) as fp:
 
+        i = 1
+        with Live(rich_table, console=console, refresh_per_second=4) as live:
+            for exposure in chain(*starmap(get_exposures, fields.keys())):
+                key = (exposure.observatory, exposure.mjd)
+                field_ids = fields[key]
+
+                if output and key not in done:
+                    done.add(key)
+                    r = get_almanac_data(*key, fibers=True, meta=True)
+                    io.update(fp, *r, **io_kwds)
+
+                if exposure.field_id in field_ids:
+                    for target in exposure.targets:
+                        if target.catalogid in catalogids:
+                            rich_table.add_row(*list(map(str, (
+                                i,
+                                exposure.observatory,
+                                exposure.mjd,
+                                exposure.exposure,
+                                exposure.field_id,
+                                target.fiber_id,
+                                target.catalogid,
+                                catalogids[target.catalogid],
+                            ))))
+                            i += 1
+                            break
+    if output:
+        console.print(f"Updated {output_path} with:")
+        for obs, mjd in done:
+            console.print(f"  - {obs}/{mjd}")
 
 @main.group()
 def add(**kwargs):
