@@ -66,7 +66,7 @@ class Exposure(BaseModel):
 
     @computed_field(description="Whether this exposure is from the FPS era")
     def fps(self) -> bool:
-        start = dict(apo=59423, lco=59810)[self.observatory]
+        start = dict(apo=59423, lco=59809)[self.observatory]
         return self.mjd >= start
 
     #@computed_field(description="FPI")
