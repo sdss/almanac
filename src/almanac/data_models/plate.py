@@ -19,10 +19,10 @@ class PlateTarget(BaseModel):
 
     twomass_id: str = Field(alias="tmass_id", default="")
     target_ids: str = Field(alias="targetids", default="")
-    category: Literal[Category] = Field(description="Category of the target", alias="targettype")
+    category: Category = Field(description="Category of the target", alias="targettype")
 
     # Positioner and hole identifiers
-    observatory: Literal[Observatory] = Field(description="Observatory") # necessary for fiber mapping fixes
+    observatory: Observatory = Field(description="Observatory") # necessary for fiber mapping fixes
     hole_type: HoleType = Field(alias="holeType", description="Type of hole")
     planned_hole_type: HoleType = Field(alias="holetype", description="Hole type string")
     obj_type: ObjType = Field(alias="objType", description="Object type", default="na")
@@ -115,7 +115,11 @@ class PlateTarget(BaseModel):
                 sub_id = (self.fiber_id - 1) % 30
                 bundle_id = (self.fiber_id - sub_id) // 30
                 self.fiber_id = (9 - bundle_id) * 30 + sub_id + 1
-            if 58034 <= self.plugged_mjd <= 58046 and self.hole_type == "object" and self.spectrograph_id == 2:
+            if (
+                (58034 <= self.plugged_mjd <= 58046)
+            and (self.spectrograph_id == 2)
+            #and (self.hole_type == "object")
+            ):
                 self.fix_fiber_flag = 2
                 # Note that the DRP code has this in a way where it ONLY changes
                 # fibers 31, 37, 45, and 54, but their expressions are written in
@@ -124,6 +128,25 @@ class PlateTarget(BaseModel):
                 # This is because the DRP code has a transcription error from the
                 # original IDL code:
                 #   https://github.com/sdss/apogee/blob/master/pro/apogeereduce/aploadplugmap.pro#L210-L221
+
+                # There is a thinko here you should be aware of.
+                # > Exposure(observatory=apo, mjd=58037, exposure=11, image_type=object)
+
+                # When this is loaded there are 298 fibers. The `Exposure` code ensures
+                # there are 300, so it adds two more and marks them as unplugged.
+
+                # In an earlier version of this code I would check for "hole_type" == "object" to
+                # match the DRP logic. However, those two extra fibers are marked as "unplugged",
+                # which means some of the fibers get the offset applied and some do not.
+                # This results in two fibers being mapped to fiber ID 36, and one fiber is now missing.
+                # That obviously causes problems downstream.
+
+                # For now I am going to remove the hole_type check, but we should look at this
+                # problem more carefully with fresh eyes.
+
+                # TODO: as above.
+
+
 
                 offset_ranges = [
                     (31, 36, +23),
