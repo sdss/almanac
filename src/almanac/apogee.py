@@ -405,7 +405,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                     except:
                         pass
 
-                if len(remaining) > 0:
+                if len(remaining) > 1:
                     raise a
 
             # Add sdss_id to targets
@@ -415,5 +415,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                     for target in exposure.targets:
                         key, identifier = parse_target_identifier(target)
                         target.sdss_id = lookup[key].get(identifier, -1)
+                        if target.sdss_id == -1:
+                            raise a
 
     return (observatory, mjd, exposures, sequences)
