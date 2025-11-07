@@ -270,7 +270,7 @@ def _write_models_to_hdf5_group(
 ):
     num_records = None
 
-    for field_name, field_spec in fields.items():
+    for field_name, field_spec in tqdm(fields.items(), desc="Writing fields"):
 
         # Extract data for this field from all models
         field_data = data[field_name]
