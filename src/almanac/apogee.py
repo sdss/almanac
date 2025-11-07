@@ -244,6 +244,27 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
             # We will often run `get_almanac_data` in parallel (through multiple processes),
             # so here we are avoiding opening a database connection until the child process starts.
             from almanac.database import is_database_available, catalogdb
+            from peewee import (ForeignKeyField, BooleanField, FloatField, TextField, IntegerField)
+
+            class CatalogToAllStar_DR17_synspec_rev1(catalogdb.CatalogdbModel):
+                catalog = ForeignKeyField(catalogdb.Catalog,
+                                        column_name='catalogid',
+                                        backref='+')
+                target = ForeignKeyField(catalogdb.AllStar_DR17_synspec_rev1,
+                                        column_name='target_id',
+                                        backref='+')
+                version = ForeignKeyField(catalogdb.Version,
+                                        column_name='version_id',
+                                        backref='+')
+                best = BooleanField()
+                distance = FloatField()
+                plan_id = TextField(null=True)
+
+                class Meta:
+                    table_name = "catalog_to_allstar_dr17_synspec_rev1"
+                    primary_key = False
+                    use_reflection = False
+
 
             lookup = {}
             if "catalogid" in identifiers and is_database_available:
@@ -287,6 +308,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                     lookup["gaia_dr2"][gaia_dr2_source_id] = sdss_id
 
             if "twomass_designation" in identifiers and is_database_available:
+                '''
                 q = (
                     catalogdb.SDSS_ID_flat
                     .select(
@@ -314,8 +336,38 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                     )
                     .tuples()
                 )
+                '''
+                q = (
+                    catalogdb.SDSS_ID_To_Catalog
+                    .select(
+                        catalogdb.SDSS_ID_To_Catalog.sdss_id,
+                        CatalogToAllStar_DR17_Synspec_Rev1.apogee_id
+                    )
+                    .join(
+                        CatalogToAllStar_DR17_Synspec_Rev1,
+                        on=(
+                            catalogdb.SDSS_ID_To_Catalog.catalogid
+                            == CatalogToAllStar_DR17_Synspec_Rev1.catalogid
+                        ),
+                    )
+                    .join(
+                        catalogdb.AllStar_DR17_Synspec_Rev1,
+                        on=(
+                            CatalogToAllStar_DR17_Synspec_Rev1.target_id
+                            == catalogdb.AllStar_DR17_Synspec_Rev1.apstar_id
+                        ),
+                    )
+                    .where(
+                        catalogdb.AllStar_DR17_Synspec_Rev1.apogee_id.in_(
+                            tuple(list(identifiers["twomass_designation"]) + list([f"2M{d}" for d in identifiers["twomass_designation"]]))
+                        )
+                    )
+                    .tuples()
+                )
                 lookup["twomass_designation"] = {}
                 for sdss_id, designation in q:
+                    if designation.startswith("2M"):
+                        designation = designation[2:]
                     lookup["twomass_designation"][designation] = sdss_id
 
             # Add sdss_id to targets
