@@ -265,7 +265,6 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                     primary_key = False
                     use_reflection = False
 
-
             lookup = {}
             if "catalogid" in identifiers and is_database_available:
                 q = (
@@ -338,10 +337,17 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                 )
                 '''
                 q = (
-                    catalogdb.SDSS_ID_To_Catalog
+                    catalogdb.SDSS_ID_flat
                     .select(
-                        catalogdb.SDSS_ID_To_Catalog.sdss_id,
+                        catalogdb.SDSS_ID_flat.sdss_id,
                         catalogdb.AllStar_DR17_synspec_rev1.apogee_id
+                    )
+                    .join(
+                        catalogdb.SDSS_ID_To_Catalog,
+                        on=(
+                            catalogdb.SDSS_ID_flat.catalogid
+                            == catalogdb.SDSS_ID_To_Catalog.catalogid
+                        )
                     )
                     .join(
                         CatalogToAllStar_DR17_synspec_rev1,
@@ -358,55 +364,59 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                         ),
                     )
                     .where(
-                        catalogdb.AllStar_DR17_synspec_rev1.apogee_id.in_(
+                        (catalogdb.SDSS_ID_flat.rank == 1)
+                    &   catalogdb.AllStar_DR17_synspec_rev1.apogee_id.in_(
                             list([f"2M{d}" for d in identifiers["twomass_designation"]])
                         )
                     )
                     .tuples()
                 )
-                remaining = set(identifiers["twomass_designation"])
+                remaining = set(identifiers["twomass_designation"]).difference({''})
                 lookup["twomass_designation"] = {}
                 for sdss_id, designation in q:
                     if designation.startswith("2M") or designation.startswith("AP"):
                         designation = designation[2:]
-                    try:
-                        remaining.remove(designation)
-                    except:
-                        lookup["twomass_designation"][designation] = sdss_id
-                # For remaining things, continue
-                q = (
-                    catalogdb.SDSS_ID_flat
-                    .select(
-                        catalogdb.SDSS_ID_flat.sdss_id,
-                        catalogdb.TwoMassPSC.designation
-                    )
-                    .join(
-                        catalogdb.CatalogToTwoMassPSC,
-                        on=(
-                            catalogdb.SDSS_ID_flat.catalogid
-                            == catalogdb.CatalogToTwoMassPSC.catalogid
-                        ),
-                    )
-                    .join(
-                        catalogdb.TwoMassPSC,
-                        on=(
-                            catalogdb.CatalogToTwoMassPSC.target_id
-                            == catalogdb.TwoMassPSC.pts_key
-                        ),
-                    )
-                    .where(catalogdb.TwoMassPSC.designation.in_(tuple(remaining)))
-                    .tuples()
-                )
-                for sdss_id, designation in q:
-                    designation = designation.lstrip("2M")
                     lookup["twomass_designation"][designation] = sdss_id
                     try:
                         remaining.remove(designation)
                     except:
                         pass
 
-                if len(remaining) > 1:
-                    raise a
+                if remaining:
+                    # For remaining things, continue
+                    q = (
+                        catalogdb.SDSS_ID_flat
+                        .select(
+                            catalogdb.SDSS_ID_flat.sdss_id,
+                            catalogdb.TwoMassPSC.designation
+                        )
+                        .join(
+                            catalogdb.CatalogToTwoMassPSC,
+                            on=(
+                                catalogdb.SDSS_ID_flat.catalogid
+                                == catalogdb.CatalogToTwoMassPSC.catalogid
+                            ),
+                        )
+                        .join(
+                            catalogdb.TwoMassPSC,
+                            on=(
+                                catalogdb.CatalogToTwoMassPSC.target_id
+                                == catalogdb.TwoMassPSC.pts_key
+                            ),
+                        )
+                        .where(catalogdb.TwoMassPSC.designation.in_(tuple(remaining)))
+                        .tuples()
+                    )
+                    for sdss_id, designation in q:
+                        designation = designation.lstrip("2M")
+                        lookup["twomass_designation"][designation] = sdss_id
+                        try:
+                            remaining.remove(designation)
+                        except:
+                            pass
+
+                    if len(remaining) > 1:
+                        raise a
 
             # Add sdss_id to targets
             for si, ei in sequences["objects"]:
@@ -415,7 +425,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                     for target in exposure.targets:
                         key, identifier = parse_target_identifier(target)
                         target.sdss_id = lookup[key].get(identifier, -1)
-                        if target.sdss_id == -1:
+                        if target.sdss_id == -1 and (target.category not in ("sky_apogee", "unplugged")):
                             raise a
 
     return (observatory, mjd, exposures, sequences)
