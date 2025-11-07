@@ -186,6 +186,21 @@ def get_science_sequences(exposures: List[Exposure]) -> List[Tuple[int, int]]:
     return get_sequences(exposures, "object", ("field_id", "plate_id", "config_id", "image_type"))
 
 
+def parse_target_identifier(target):
+
+    if target.catalogid > 0:
+        return ("catalogid", target.catalogid)
+    else:
+        if target.twomass_designation.startswith("GAIA_DR2"):
+            return ("gaia_dr2", np.int64(target.twomass_designation.split(" ")[1]))
+        else:
+            designation = target.twomass_designation
+            if designation.startswith("2M"):
+                designation = designation[2:]
+            designation = designation.lstrip("APG-J")
+            return ("twomass_designation", designation)
+
+
 def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: bool = False):
     """
     Return comprehensive almanac data for all exposures taken from a given observatory on a given MJD.
@@ -217,25 +232,21 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
         "arclamps": get_arclamp_sequences(exposures),
     }
     if fibers:
-        catalogids, twomass_designations = (set(), set())
+        identifiers = {}
         # We only need to get targets for one exposure in each science sequence.
         for si, ei in sequences["objects"]:
             exposure = exposures[si - 1]
             for target in exposure.targets:
-                if target.expected_to_be_assigned_sdss_id:
-                    if target.catalogid > 0:
-                        catalogids.add(target.catalogid)
-                    else:
-                        twomass_designations.add(target.twomass_designation)
+                key, identifier = parse_target_identifier(target)
+                identifiers.setdefault(key, set()).add(identifier)
 
         if meta:
             # We will often run `get_almanac_data` in parallel (through multiple processes),
             # so here we are avoiding opening a database connection until the child process starts.
             from almanac.database import is_database_available, catalogdb
 
-            lookup_catalog = {}
-            lookup_twomass = {}
-            if catalogids and is_database_available:
+            lookup = {}
+            if "catalogid" in identifiers and is_database_available:
                 q = (
                     catalogdb.SDSS_ID_flat
                     .select(
@@ -243,15 +254,39 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                         catalogdb.SDSS_ID_flat.catalogid
                     )
                     .where(
-                        catalogdb.SDSS_ID_flat.catalogid.in_(tuple(catalogids))
+                        catalogdb.SDSS_ID_flat.catalogid.in_(tuple(identifiers["catalogid"]))
                     &   (catalogdb.SDSS_ID_flat.rank == 1)
                     )
                     .tuples()
                 )
+                lookup["catalogid"] = {}
                 for sdss_id, catalogid in q:
-                    lookup_catalog[catalogid] = sdss_id
+                    lookup["catalogid"][catalogid] = sdss_id
 
-            if twomass_designations and is_database_available:
+            if "gaia_dr2" in identifiers and is_database_available:
+                q = (
+                    catalogdb.SDSS_ID_flat
+                    .select(
+                        catalogdb.SDSS_ID_flat.sdss_id,
+                        catalogdb.CatalogToGaia_DR2.catalog
+                    )
+                    .join(
+                        catalogdb.CatalogToGaia_DR2,
+                        on=(
+                            catalogdb.SDSS_ID_flat.catalogid == catalogdb.CatalogToGaia_DR2.catalog
+                        )
+                    )
+                    .where(
+                        catalogdb.CatalogToGaia_DR2.target.in_(tuple(identifiers["gaia_dr2"]))
+                    &   (catalogdb.SDSS_ID_flat.rank == 1)
+                    )
+                    .tuples()
+                )
+                lookup["gaia_dr2"] = {}
+                for sdss_id, gaia_dr2_source_id in q:
+                    lookup["gaia_dr2"][gaia_dr2_source_id] = sdss_id
+
+            if "twomass_designation" in identifiers and is_database_available:
                 q = (
                     catalogdb.SDSS_ID_flat
                     .select(
@@ -274,27 +309,21 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                     )
                     .where(
                         catalogdb.TwoMassPSC.designation.in_(
-                            tuple(twomass_designations)
+                            tuple(identifiers["twomass_designation"])
                         )
                     )
                     .tuples()
                 )
+                lookup["twomass_designation"] = {}
                 for sdss_id, designation in q:
-                    lookup_twomass[designation] = sdss_id
+                    lookup["twomass_designation"][designation] = sdss_id
 
             # Add sdss_id to targets
             for si, ei in sequences["objects"]:
                 for i in range(si - 1, ei):
                     exposure = exposures[i]
                     for target in exposure.targets:
-
-                        matches = [
-                            lookup_catalog.get(target.catalogid, -1),
-                            lookup_twomass.get(target.twomass_designation, -1)
-                        ]
-                        for match in matches:
-                            if match > 0:
-                                target.sdss_id = match
-                                break
+                        key, identifier = parse_target_identifier(target)
+                        target.sdss_id = lookup[key].get(identifier, -1)
 
     return (observatory, mjd, exposures, sequences)
