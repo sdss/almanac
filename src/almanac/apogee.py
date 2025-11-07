@@ -197,8 +197,8 @@ def parse_target_identifier(target):
             designation = target.twomass_designation
             if designation.startswith("2M"):
                 designation = designation[2:]
-            designation = designation.lstrip("APG-J")
-            return ("twomass_designation", designation)
+            designation = designation.replace("APG-J", "AP")
+            return ("apogee_id", designation)
 
 
 def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: bool = False):
@@ -341,34 +341,72 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                     catalogdb.SDSS_ID_To_Catalog
                     .select(
                         catalogdb.SDSS_ID_To_Catalog.sdss_id,
-                        CatalogToAllStar_DR17_Synspec_Rev1.apogee_id
+                        CatalogToAllStar_DR17_synspec_rev1.apogee_id
                     )
                     .join(
-                        CatalogToAllStar_DR17_Synspec_Rev1,
+                        CatalogToAllStar_DR17_synspec_rev1,
                         on=(
                             catalogdb.SDSS_ID_To_Catalog.catalogid
-                            == CatalogToAllStar_DR17_Synspec_Rev1.catalogid
+                            == CatalogToAllStar_DR17_synspec_rev1.catalogid
                         ),
                     )
                     .join(
-                        catalogdb.AllStar_DR17_Synspec_Rev1,
+                        catalogdb.AllStar_DR17_synspec_rev1,
                         on=(
-                            CatalogToAllStar_DR17_Synspec_Rev1.target_id
-                            == catalogdb.AllStar_DR17_Synspec_Rev1.apstar_id
+                            CatalogToAllStar_DR17_synspec_rev1.target_id
+                            == catalogdb.AllStar_DR17_synspec_rev1.apstar_id
                         ),
                     )
                     .where(
-                        catalogdb.AllStar_DR17_Synspec_Rev1.apogee_id.in_(
+                        catalogdb.AllStar_DR17_synspec_rev1.apogee_id.in_(
                             tuple(list(identifiers["twomass_designation"]) + list([f"2M{d}" for d in identifiers["twomass_designation"]]))
                         )
                     )
                     .tuples()
                 )
+                identifiers = list(identifiers)
                 lookup["twomass_designation"] = {}
                 for sdss_id, designation in q:
-                    if designation.startswith("2M"):
+                    if designation.startswith("2M") or designation.startswith("AP"):
                         designation = designation[2:]
+                    try:
+                        identifiers.remove(designation)
+                    except:
+                        lookup["twomass_designation"][designation] = sdss_id
+                # For remaining things, continue
+                q = (
+                    catalogdb.SDSS_ID_flat
+                    .select(
+                        catalogdb.SDSS_ID_flat.sdss_id,
+                        catalogdb.TwoMassPSC.designation
+                    )
+                    .join(
+                        catalogdb.CatalogToTwoMassPSC,
+                        on=(
+                            catalogdb.SDSS_ID_flat.catalogid
+                            == catalogdb.CatalogToTwoMassPSC.catalogid
+                        ),
+                    )
+                    .join(
+                        catalogdb.TwoMassPSC,
+                        on=(
+                            catalogdb.CatalogToTwoMassPSC.target_id
+                            == catalogdb.TwoMassPSC.pts_key
+                        ),
+                    )
+                    .where(catalogdb.TwoMassPSC.designation.in_(tuple(identifiers)))
+                    .tuples()
+                )
+                for sdss_id, designation in q:
+                    designation = designation.lstrip("2M")
                     lookup["twomass_designation"][designation] = sdss_id
+                    try:
+                        identifiers.remove(designation)
+                    except:
+                        pass
+
+                if len(identifiers) > 0:
+                    raise a
 
             # Add sdss_id to targets
             for si, ei in sequences["objects"]:
