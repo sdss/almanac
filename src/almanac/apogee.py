@@ -13,6 +13,91 @@ from almanac.data_models import Exposure
 from almanac.data_models.types import ImageType
 from almanac.data_models.utils import mjd_to_exposure_prefix, get_exposure_path
 
+
+APOGEE_ID_LOOKUP = None
+
+def create_apogee_id_lookup() -> Dict[str, int]:
+    """
+    Create a lookup dictionary mapping APOGEE IDs to SDSS IDs.
+    """
+    global APOGEE_ID_LOOKUP
+    """
+    import pickle
+    with open("apogee_id_lookup.pkl", "rb") as f:
+        foo = pickle.load(f)
+    APOGEE_ID_LOOKUP = {}
+    for key, value in foo.items():
+        APOGEE_ID_LOOKUP[key] = value
+        for prefix in ("2M", "J", "AP"):
+            if key.startswith(prefix):
+                APOGEE_ID_LOOKUP[key[len(prefix):]] = value
+
+    return APOGEE_ID_LOOKUP
+    """
+
+    from almanac.database import is_database_available, catalogdb
+
+    from peewee import (ForeignKeyField, BooleanField, FloatField, TextField, IntegerField)
+
+    class CatalogToAllStar_DR17_synspec_rev1(catalogdb.CatalogdbModel):
+        catalog = ForeignKeyField(catalogdb.Catalog,
+                                column_name='catalogid',
+                                backref='+')
+        target = ForeignKeyField(catalogdb.AllStar_DR17_synspec_rev1,
+                                column_name='target_id',
+                                backref='+')
+        version = ForeignKeyField(catalogdb.Version,
+                                column_name='version_id',
+                                backref='+')
+        best = BooleanField()
+        distance = FloatField()
+        plan_id = TextField(null=True)
+
+        class Meta:
+            table_name = "catalog_to_allstar_dr17_synspec_rev1"
+            primary_key = False
+            use_reflection = False
+
+
+    q = (
+        catalogdb.SDSS_ID_flat
+        .select(
+            catalogdb.SDSS_ID_flat.sdss_id,
+            catalogdb.AllStar_DR17_synspec_rev1.apogee_id
+        )
+        .join(
+            catalogdb.SDSS_ID_To_Catalog,
+            on=(
+                catalogdb.SDSS_ID_flat.catalogid
+                == catalogdb.SDSS_ID_To_Catalog.catalogid
+            )
+        )
+        .join(
+            CatalogToAllStar_DR17_synspec_rev1,
+            on=(
+                catalogdb.SDSS_ID_To_Catalog.catalogid
+                == CatalogToAllStar_DR17_synspec_rev1.catalogid
+            ),
+        )
+        .join(
+            catalogdb.AllStar_DR17_synspec_rev1,
+            on=(
+                CatalogToAllStar_DR17_synspec_rev1.target_id
+                == catalogdb.AllStar_DR17_synspec_rev1.apstar_id
+            ),
+        )
+        .where(catalogdb.SDSS_ID_flat.rank == 1)
+        .tuples()
+    )
+    APOGEE_ID_LOOKUP = {}
+    for sdss_id, apogee_id in q.iterator():
+        APOGEE_ID_LOOKUP[apogee_id] = sdss_id
+        for prefix in ("2M", "J", "AP"):
+            if apogee_id.startswith(prefix):
+                APOGEE_ID_LOOKUP[apogee_id[len(prefix):]] = sdss_id
+    return APOGEE_ID_LOOKUP
+
+
 def get_unique_exposure_paths(paths: List[str]) -> List[str]:
     """
     Process a list of file paths to find unique exposures and determine which chips are available.
@@ -188,20 +273,28 @@ def get_science_sequences(exposures: List[Exposure]) -> List[Tuple[int, int]]:
 
 def parse_target_identifier(target):
 
-    if target.catalogid > 0:
+    # catalogids prior to 4204682057 don't have a direct sdss_id mapping.
+    if target.catalogid >= 4204682057:
         return ("catalogid", target.catalogid)
     else:
         if target.twomass_designation.startswith("GAIA_DR2"):
             return ("gaia_dr2", np.int64(target.twomass_designation.split(" ")[1]))
         else:
             designation = target.twomass_designation
-            if designation.startswith("2M"):
-                designation = designation[2:]
-            designation = designation.replace("APG-J", "AP")
-            return ("twomass_designation", designation)
+            for prefix in ("2MASS-J", "2MASS", "2M", "J", "APG-J", "AP"):
+                if designation.startswith(prefix):
+                    designation = designation[len(prefix):]
+                    break
+            return ("coordinate", designation)
 
 
-def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: bool = False):
+def get_almanac_data(
+    observatory: str,
+    mjd: int,
+    fibers: bool = False,
+    meta: bool = False,
+    only_assign_sdss_id_to_first_exposure_per_configuration: bool = True
+):
     """
     Return comprehensive almanac data for all exposures taken from a given observatory on a given MJD.
 
@@ -244,26 +337,6 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
             # We will often run `get_almanac_data` in parallel (through multiple processes),
             # so here we are avoiding opening a database connection until the child process starts.
             from almanac.database import is_database_available, catalogdb
-            from peewee import (ForeignKeyField, BooleanField, FloatField, TextField, IntegerField)
-
-            class CatalogToAllStar_DR17_synspec_rev1(catalogdb.CatalogdbModel):
-                catalog = ForeignKeyField(catalogdb.Catalog,
-                                        column_name='catalogid',
-                                        backref='+')
-                target = ForeignKeyField(catalogdb.AllStar_DR17_synspec_rev1,
-                                        column_name='target_id',
-                                        backref='+')
-                version = ForeignKeyField(catalogdb.Version,
-                                        column_name='version_id',
-                                        backref='+')
-                best = BooleanField()
-                distance = FloatField()
-                plan_id = TextField(null=True)
-
-                class Meta:
-                    table_name = "catalog_to_allstar_dr17_synspec_rev1"
-                    primary_key = False
-                    use_reflection = False
 
             lookup = {}
             if "catalogid" in identifiers and is_database_available:
@@ -288,7 +361,7 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                     catalogdb.SDSS_ID_flat
                     .select(
                         catalogdb.SDSS_ID_flat.sdss_id,
-                        catalogdb.CatalogToGaia_DR2.catalog
+                        catalogdb.CatalogToGaia_DR2.target
                     )
                     .join(
                         catalogdb.CatalogToGaia_DR2,
@@ -306,89 +379,22 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                 for sdss_id, gaia_dr2_source_id in q:
                     lookup["gaia_dr2"][gaia_dr2_source_id] = sdss_id
 
-            if "twomass_designation" in identifiers and is_database_available:
-                '''
-                q = (
-                    catalogdb.SDSS_ID_flat
-                    .select(
-                        catalogdb.SDSS_ID_flat.sdss_id,
-                        catalogdb.TwoMassPSC.designation
-                    )
-                    .join(
-                        catalogdb.CatalogToTwoMassPSC,
-                        on=(
-                            catalogdb.SDSS_ID_flat.catalogid
-                            == catalogdb.CatalogToTwoMassPSC.catalogid
-                        ),
-                    )
-                    .join(
-                        catalogdb.TwoMassPSC,
-                        on=(
-                            catalogdb.CatalogToTwoMassPSC.target_id
-                            == catalogdb.TwoMassPSC.pts_key
-                        ),
-                    )
-                    .where(
-                        catalogdb.TwoMassPSC.designation.in_(
-                            tuple(identifiers["twomass_designation"])
-                        )
-                    )
-                    .tuples()
-                )
-                '''
-                q = (
-                    catalogdb.SDSS_ID_flat
-                    .select(
-                        catalogdb.SDSS_ID_flat.sdss_id,
-                        catalogdb.AllStar_DR17_synspec_rev1.apogee_id
-                    )
-                    .join(
-                        catalogdb.SDSS_ID_To_Catalog,
-                        on=(
-                            catalogdb.SDSS_ID_flat.catalogid
-                            == catalogdb.SDSS_ID_To_Catalog.catalogid
-                        )
-                    )
-                    .join(
-                        CatalogToAllStar_DR17_synspec_rev1,
-                        on=(
-                            catalogdb.SDSS_ID_To_Catalog.catalogid
-                            == CatalogToAllStar_DR17_synspec_rev1.catalogid
-                        ),
-                    )
-                    .join(
-                        catalogdb.AllStar_DR17_synspec_rev1,
-                        on=(
-                            CatalogToAllStar_DR17_synspec_rev1.target_id
-                            == catalogdb.AllStar_DR17_synspec_rev1.apstar_id
-                        ),
-                    )
-                    .where(
-                        (catalogdb.SDSS_ID_flat.rank == 1)
-                    &   catalogdb.AllStar_DR17_synspec_rev1.apogee_id.in_(
-                            list([f"2M{d}" for d in identifiers["twomass_designation"]])
-                        )
-                    )
-                    .tuples()
-                )
-                remaining = set(identifiers["twomass_designation"]).difference({''})
-                lookup["twomass_designation"] = {}
-                for sdss_id, designation in q:
-                    if designation.startswith("2M") or designation.startswith("AP"):
-                        designation = designation[2:]
-                    lookup["twomass_designation"][designation] = sdss_id
-                    try:
-                        remaining.remove(designation)
-                    except:
-                        pass
+
+            if "coordinate" in identifiers and is_database_available:
+                global APOGEE_ID_LOOKUP
+                if APOGEE_ID_LOOKUP is None:
+                    APOGEE_ID_LOOKUP = create_apogee_id_lookup()
+
+                lookup["apogee_id"] = APOGEE_ID_LOOKUP
+                remaining = set(identifiers["coordinate"]).difference(lookup["apogee_id"].keys())
 
                 if remaining:
-                    # For remaining things, continue
+                    # For remaining things, check 2MASS.
                     q = (
                         catalogdb.SDSS_ID_flat
                         .select(
-                            catalogdb.SDSS_ID_flat.sdss_id,
-                            catalogdb.TwoMassPSC.designation
+                            catalogdb.TwoMassPSC.designation,
+                            catalogdb.SDSS_ID_flat.sdss_id
                         )
                         .join(
                             catalogdb.CatalogToTwoMassPSC,
@@ -404,28 +410,30 @@ def get_almanac_data(observatory: str, mjd: int, fibers: bool = False, meta: boo
                                 == catalogdb.TwoMassPSC.pts_key
                             ),
                         )
-                        .where(catalogdb.TwoMassPSC.designation.in_(tuple(remaining)))
+                        .where(
+                            catalogdb.TwoMassPSC.designation.in_(tuple(remaining))
+                        &   (catalogdb.SDSS_ID_flat.rank == 1)
+                        )
                         .tuples()
                     )
-                    for sdss_id, designation in q:
-                        designation = designation.lstrip("2M")
-                        lookup["twomass_designation"][designation] = sdss_id
-                        try:
-                            remaining.remove(designation)
-                        except:
-                            pass
-
-                    if len(remaining) > 1:
-                        raise a
+                    lookup["twomass_psc"] = { d: s for d, s in q }
 
             # Add sdss_id to targets
             for si, ei in sequences["objects"]:
-                for i in range(si - 1, ei):
+                iterable = [si - 1] if only_assign_sdss_id_to_first_exposure_per_configuration else range(si - 1, ei)
+                for i in iterable:
                     exposure = exposures[i]
                     for target in exposure.targets:
                         key, identifier = parse_target_identifier(target)
-                        target.sdss_id = lookup[key].get(identifier, -1)
-                        if target.sdss_id == -1 and (target.category not in ("sky_apogee", "unplugged")):
-                            raise a
+                        if key == "coordinate":
+                            for lookup_key in ("apogee_id", "twomass_psc"):
+                                target.sdss_id = lookup[lookup_key].get(identifier, -1)
+                                if target.sdss_id != -1:
+                                    break
+                        else:
+                            target.sdss_id = lookup[key].get(identifier, -1)
+
+                        #if target.sdss_id == -1 and (target.category not in ("sky_apogee", "unplugged")):
+                        #    print(f"{observatory} {mjd} Exposure {exposure.exposure}: Could not find SDSS ID for target {identifier} ({key}) {target}")
 
     return (observatory, mjd, exposures, sequences)

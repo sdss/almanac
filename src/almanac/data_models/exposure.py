@@ -332,7 +332,6 @@ class Exposure(BaseModel):
                             "deccat": np.nan,
                             "category": "bonus",
                         })
-                    rows.sort("fiberId")
                 else:
                     factory = PlateTarget
                     bad_exposure_notes = (
@@ -349,6 +348,11 @@ class Exposure(BaseModel):
                             # went wrong in early plate era.
                             rows["plugged_mjd"] = self.plugged_mjd
                             rows["observatory"] = self.observatory
+                try:
+                    rows.sort("fiberId")
+                except:
+                    None
+
                 try:
                     self._targets = tuple([factory(**r) for r in rows])
                 except Exception as e:

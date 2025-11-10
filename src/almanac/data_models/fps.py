@@ -14,7 +14,7 @@ class FPSTarget(BaseModel):
     sdss_id: Int64 = Field(default=-1)
     catalogid: Int64 = Field(default=-1)
     twomass_designation: str = Field(default="", alias="tmass_id")
-    category: Literal[Category] = Field(description="Category of the target")
+    category: Category = Field(description="Category of the target")
     cadence: str = Field(description="Cadence identifier", default="")
     firstcarton: str = Field(description="Main carton from which this carton was drawn", default="")
     program: str = Field(description="Program for 'firstcarton'", default="")
