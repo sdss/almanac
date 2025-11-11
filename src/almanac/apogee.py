@@ -424,6 +424,10 @@ def get_almanac_data(
                 for i in iterable:
                     exposure = exposures[i]
                     for target in exposure.targets:
+                        if target.category == "unplugged":
+                            # Don't assign sdss_id to unplugged targets.
+                            continue
+
                         key, identifier = parse_target_identifier(target)
                         if key == "coordinate":
                             for lookup_key in ("apogee_id", "twomass_psc"):
